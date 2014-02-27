@@ -4,6 +4,7 @@ http://leon.bottou.org/projects/minilisp
 http://www.jsoftware.com/jwiki/Essays/Incunabulum
 http://www-formal.stanford.edu/jmc/recursive/recursive.html
 http://www.paulgraham.com/rootsoflisp.html
+http://codegolf.stackexchange.com/questions/284/write-an-interpreter-for-the-untyped-lambda-calculus/3290#3290
  */
 #include<assert.h>
 #include<signal.h>
