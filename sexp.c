@@ -148,10 +148,15 @@ rd(char**p){int t,u,v,z; /*read a list [^stackoverflow]*/
 
 void fix(x){signal(SIGSEGV,fix);sbrk(msz);msz*=2;} /*grow memory in response to memory-access fault*/
 int main(){
+    //char *s;
+    char s[BUFSIZ];
+    char *p;
+    int a;
+
     assert((-1>>1)==-1);	/*require 2's-complement and right-shift must be sign-preserving */
     n=m=sbrk(sizeof(int)*(msz=getpagesize()));*n++=0;*n++=0; /*initialize memory and begin at cell 2*/
     //signal(SIGSEGV,fix); /*might let it run longer, obscures problems*/
-    char *s;
+
     //s = "(Q (A (Q X)))";
     //s = "(1 2 3 4 5)";
     //s = "(E (Q X) (Q X))";
@@ -159,8 +164,10 @@ int main(){
     //s = "( (L (Q X) (Q (X X X))) (Q Y) )";
     //s = "(L (X) Y)";
     //s = "( (L (X) (X Z)) (Q Q) )"; // -> 'Z'
-    char *p = s;
-    int a = rd (&p);
+    fgets(s,sizeof s,stdin);
+    s[strlen(s)-1]=0;
+    p = s;
+    a = rd (&p);
     printf ("%s\n", s);
 
     int x, y;
