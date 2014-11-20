@@ -12,6 +12,7 @@ http://stackoverflow.com/questions/18096456/why-wont-my-little-lisp-quote
 #include<stdarg.h>
 #include<stdio.h>
 #include<stdlib.h>
+#include<string.h>
 #include<unistd.h>
 #include"ppnarg.h"
 #define R return
@@ -29,23 +30,59 @@ tag(x){R x&3;}
 val(x){R x>>2;}
 
 /* bias the alphabet at the ascii code for T,  [<my own brilliant idea]
-   this way, the word 1 :: 30bit 0 + 2bit 01 :: the symbol T
-        and, the word 0 :: 30bit 0 + 2bit 00 :: the list NIL
-                 word 5 :: 30bit 1 + 2bit 01 :: the symbol U
-                 word 9 :: 30bit 2 + 2bit 01 :: the symbol V
-                 word 4 :: 30bit 1 + 2bit 00 :: the list at address 1
-                 word 8 :: 30bit 2 + 2bit 00 :: the list at address 2
+   this way, the word 1 means 30bit 0 + 2bit 01 :: the symbol T
+        and, the word 0  ::   30bit 0 + 2bit 00 :: the list NIL
+                 word 5  ::   30bit 1 + 2bit 01 :: the symbol U
+                 word 9  ::   30bit 2 + 2bit 01 :: the symbol V
+                 word 4  ::   30bit 1 + 2bit 00 :: the list at address 1
+                 word 8  ::   30bit 2 + 2bit 00 :: the list at address 2
 
    tag  00 : list   : val is "pointer" to 2-cell pair
         01 : atom   : val + 'T' is an ascii code
         10 : object
         11 : number
    [^minilisp]
+   ____________
+   21111111 111_____ ___
+   09876543 21098765 32101234 56
+   ABCDEFGH IJKLMNOP QRSTUVWX YZ
+
+   6bit code
+   1 2 3 4  5  6
+   2 4 8 16 32 64
+           26 52
+
+   0          111111 11112222 22222233 33333333 44444444 44555555 5555 6666
+   01234567 89012345 67890123 45678901 23456789 01234567 89012345 6789 0123  <- general position
+
+  " ABCDEFG HIJKLMNO PQRSTUVW XYZ_ahcd efghijkl mnopqrst uvwxyz01 2345 6789"
+
+   -------- -------- ----
+   21111111 111          0          11 11111111 22222222 22333333 3333 4444
+   09876543 21098765 43210123 45678901 23456789 01234567 89012345 6789 0123  <- first char
+   44444455 55555555 6666
+   45678901 23456789 0123
 */
-#define ALPHA 'T'
+#define ENCODING " ABCDEFGHIJKLMNOPQRSTUVWXYZ_ahcdefghijklmnopqrstuvwxyz()23456789"
+#define ALPHA "T"
 #define NIL   (0)
 #define T atom(ALPHA)
-atom(x){R((x-ALPHA)<<2)|1;}  /*constructors*/
+enc(x){R strchr(ENCODING,x)-ENCODING;}
+atom(char *x){char*p=x;
+    //if (!strchr(ENCODING,*x)) R 0;
+    printf("atom(%s)=",x);
+    unsigned int r;
+    if (!*p) r=(enc(' ')+44)%64;
+    else {
+        r=(enc(*p)+44)%64;
+        while(*++p)
+            if (strchr(ENCODING,*p) && !strchr("()",*p))
+                r|=(enc(*p)<<(6*(p-x)));
+    }
+    r= (r<<2)|1;
+    printf("%u\n", r);
+    R r;
+}  /*constructors*/
 number(x){R(x<<2)|3;}
 listp(x){R tag(x)==0;}       /*predicates*/
 atomp(x){R tag(x)==1;}
@@ -94,30 +131,45 @@ pair(x,y){R null(x)&&null(y)?NIL:consp(x)&&consp(y)?
 assoc(x,y){R eq(caar(y),x)?cadar(y):assoc(x,cdr(y));}
 
 sub2(x,z){R null(x)?z:eq(caar(x),z)?cadar(x):sub2(cdr(x),z);}  /*the universal function eval() [^jmc]*/
-sublis(x,y){R atom(y)?sub2(x,y):cons(sublis(x,car(y)),sublis(x,cdr(y)));}
+sublis(x,y){R atomp(y)?sub2(x,y):cons(sublis(x,car(y)),sublis(x,cdr(y)));}
 apply(f,args){R eval(cons(f,appq(args)),NIL);}
-appq(m){R null(m)?NIL:cons(list(atom('Q'),car(m)),appq(cdr(m)));}
+appq(m){R null(m)?NIL:cons(list(atom("Q"),car(m)),appq(cdr(m)));}
 eval(e,a){R numberp(e)?e:
     atomp(e)?assoc(e,a):
     atomp(car(e))?(
-    /*QUOTE*/      eq(car(e),atom('Q'))?cadr(e):
-    /*ATOM*/       eq(car(e),atom('A'))?atomp(eval(cadr(e),a)):
-    /*EQ*/         eq(car(e),atom('E'))?eval(cadr(e),a)==eval(caddr(e),a):
-    /*COND*/       eq(car(e),atom('D'))?evcon(cadr(e),a):
-    /*CAR*/        eq(car(e),atom('H'))?car(eval(cadr(e),a)):
-    /*CDR*/        eq(car(e),atom('R'))?cdr(eval(cadr(e),a)):
-    /*CONS*/       eq(car(e),atom('C'))?cons(eval(cadr(e),a),eval(caddr(e),a)):
+    /*QUOTE*/      eq(car(e),atom("Q"))?cadr(e):
+    /*ATOM*/       eq(car(e),atom("A"))?atomp(eval(cadr(e),a)):
+    /*EQ*/         eq(car(e),atom("E"))?eval(cadr(e),a)==eval(caddr(e),a):
+    /*COND*/       eq(car(e),atom("D"))?evcon(cadr(e),a):
+    /*CAR*/        eq(car(e),atom("H"))?car(eval(cadr(e),a)):
+    /*CDR*/        eq(car(e),atom("R"))?cdr(eval(cadr(e),a)):
+    /*CONS*/       eq(car(e),atom("C"))?cons(eval(cadr(e),a),eval(caddr(e),a)):
         eval(cons(assoc(car(e),a),cdr(e)),a)): /*cf. Roots of Lisp*/
         //eval(cons(assoc(car(e),a),evlis(cdr(e),a)),a) ):
-    eq(caar(e),atom('M'))? /*LABEL*/
+    eq(caar(e),atom("M"))? /*LABEL*/
         eval(cons(caddar(e),cdr(e)),cons(list(cadar(e),car(e)),a)):
-    eq(caar(e),atom('L'))? /*LAMBDA*/
+    eq(caar(e),atom("L"))? /*LAMBDA*/
         eval(caddar(e),append(pair(cadar(e),evlis(cdr(e),a)),a)):0;}
 evcon(c,a){R eval(caar(c),a)?eval(cadar(c),a):evcon(cdr(c),a);}
 evlis(m,a){R null(m)?NIL:cons(eval(car(m),a),evlis(cdr(m),a));}
 maplist(x,f){R null(x)?NIL:cons(apply(f,x),maplist(cdr(x),f));}
 
-prn(x){atomp(x)?printf("%c ",val(x)+ALPHA): /*print with dot-notation [^stackoverflow]*/
+prnatom(unsigned x){
+    int i;
+    unsigned int a;
+    x>>=2;
+    a=x&0x3f;
+    a=(a + 20) % 64;
+    for(i=0;i<6;i++) {
+        //printf("%u:%c ", a, ENCODING[a]);
+        if (ENCODING[a]==' ') break;
+        printf("%c",ENCODING[a]);
+        x>>=6;
+        a=x&0x3f;
+    }
+    printf(" ");
+}
+prn(x){atomp(x)?prnatom(x)/*printf("%c ",val(x)+ALPHA)*/: /*print with dot-notation [^stackoverflow]*/
     numberp(x)?printf("%d ",val(x)):
     objectp(x)?printf("OBJ %d ",val(x)):
     consp(x)?printf("( "),prn(car(x)),printf(". "),prn(cdr(x)),printf(") "):
@@ -131,20 +183,30 @@ prnrem(x){if(x==NIL)R;// printf(")0 ");
     !listp(cdr(x))?prn(cdr(x)),printf(") "):
     prnlst(car(cdr(x))),prnrem(cdr(cdr(x))),printf(") ");}
 
-#define LPAR '('
-#define RPAR ')'
-rd(char**p){int t,u,v,z; /*read a list [^stackoverflow]*/
+#define LPAR "("
+#define RPAR ")"
+rd(char**p){int i,t,u,v,z; /*read a list [^stackoverflow]*/
+    char boffo[6] = "";
     if(!(**p))R 0;
     if(**p==' ')R++(*p),rd(p);
-    if(**p==RPAR)R++(*p),atom(RPAR);
-    if(**p==LPAR){++(*p);
+    if(**p==*RPAR)R++(*p),atom(RPAR);
+    if(**p==*LPAR){++(*p);
         z=NIL;
         u=rd(p);
         z=cons(u,NIL);
         while(u=rd(p),!eq(u,atom(RPAR)))u=cons(u,NIL),z=append(z,u);
         R z;}
     if(**p>='0'&&**p<='9')R++(*p),number(*((*p)-1)-'0');
-    R++(*p),atom(*((*p)-1));}
+    for(i=0;i<-1+sizeof boffo;i++){
+        if (isspace((*p)[i]) || (*p)[i]=='\0') break;
+        if (!strchr(ENCODING,(*p)[i])) break;
+        if (strchr("()",(*p)[i])) break;
+        boffo[i]=(*p)[i];
+    }
+    boffo[i]='\0';
+    (*p)+=i;
+    R atom(boffo);
+}
 
 void fix(x){signal(SIGSEGV,fix);sbrk(msz);msz*=2;} /*grow memory in response to memory-access fault*/
 int main(){
