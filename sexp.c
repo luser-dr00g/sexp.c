@@ -133,22 +133,22 @@ assoc(x,y){R eq(caar(y),x)?cadar(y):assoc(x,cdr(y));}
 sub2(x,z){R null(x)?z:eq(caar(x),z)?cadar(x):sub2(cdr(x),z);}  /*the universal function eval() [^jmc]*/
 sublis(x,y){R atomp(y)?sub2(x,y):cons(sublis(x,car(y)),sublis(x,cdr(y)));}
 apply(f,args){R eval(cons(f,appq(args)),NIL);}
-appq(m){R null(m)?NIL:cons(list(atom("Q"),car(m)),appq(cdr(m)));}
+appq(m){R null(m)?NIL:cons(list(atom("QUOTE"),car(m)),appq(cdr(m)));}
 eval(e,a){R numberp(e)?e:
     atomp(e)?assoc(e,a):
     atomp(car(e))?(
-    /*QUOTE*/      eq(car(e),atom("Q"))?cadr(e):
-    /*ATOM*/       eq(car(e),atom("A"))?atomp(eval(cadr(e),a)):
-    /*EQ*/         eq(car(e),atom("E"))?eval(cadr(e),a)==eval(caddr(e),a):
-    /*COND*/       eq(car(e),atom("D"))?evcon(cadr(e),a):
-    /*CAR*/        eq(car(e),atom("H"))?car(eval(cadr(e),a)):
-    /*CDR*/        eq(car(e),atom("R"))?cdr(eval(cadr(e),a)):
-    /*CONS*/       eq(car(e),atom("C"))?cons(eval(cadr(e),a),eval(caddr(e),a)):
+    /*QUOTE*/      eq(car(e),atom("QUOTE"))?cadr(e):
+    /*ATOM*/       eq(car(e),atom("ATOM"))? atomp(eval(cadr(e),a)):
+    /*EQ*/         eq(car(e),atom("EQ"))?   eval(cadr(e),a)==eval(caddr(e),a):
+    /*COND*/       eq(car(e),atom("COND"))? evcon(cadr(e),a):
+    /*CAR*/        eq(car(e),atom("CAR"))?  car(eval(cadr(e),a)):
+    /*CDR*/        eq(car(e),atom("CDR"))?  cdr(eval(cadr(e),a)):
+    /*CONS*/       eq(car(e),atom("CONS"))? cons(eval(cadr(e),a),eval(caddr(e),a)):
         eval(cons(assoc(car(e),a),cdr(e)),a)): /*cf. Roots of Lisp*/
         //eval(cons(assoc(car(e),a),evlis(cdr(e),a)),a) ):
-    eq(caar(e),atom("M"))? /*LABEL*/
+    eq(caar(e),atom("LABEL"))? /*LABEL*/
         eval(cons(caddar(e),cdr(e)),cons(list(cadar(e),car(e)),a)):
-    eq(caar(e),atom("L"))? /*LAMBDA*/
+    eq(caar(e),atom("LAMBD"))? /*LAMBDA*/
         eval(caddar(e),append(pair(cadar(e),evlis(cdr(e),a)),a)):0;}
 evcon(c,a){R eval(caar(c),a)?eval(cadar(c),a):evcon(cdr(c),a);}
 evlis(m,a){R null(m)?NIL:cons(eval(car(m),a),evlis(cdr(m),a));}
