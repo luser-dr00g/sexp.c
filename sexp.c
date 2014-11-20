@@ -6,6 +6,7 @@ http://www-formal.stanford.edu/jmc/recursive/recursive.html
 http://www.paulgraham.com/rootsoflisp.html
 http://codegolf.stackexchange.com/questions/284/write-an-interpreter-for-the-untyped-lambda-calculus/3290#3290
 http://stackoverflow.com/questions/18096456/why-wont-my-little-lisp-quote
+http://www.cse.sc.edu/~mgv/csce330f13/micromanualLISP.pdf
  */
 #include<assert.h>
 #include<signal.h>
