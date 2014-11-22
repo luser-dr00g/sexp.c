@@ -179,7 +179,7 @@ prn(x){atomp(x)?prnatom(x)/*printf("%c ",val(x)+ALPHA)*/: /*print with dot-notat
 prnlst(x){x==NIL?0:!consp(x)?prn(x):printf("( "),prnrem(x);} /*print with list-notation [^stackoverflow]*/
 prnrem(x){if(x==NIL)R;// printf(")0 ");
     if(car(x)!=NIL)prn(car(x));
-    else R
+    else R;
     null(cdr(x))?printf(") "):
     !listp(cdr(x))?prn(cdr(x)),printf(") "):
     prnlst(car(cdr(x))),prnrem(cdr(cdr(x))),printf(") ");}
@@ -243,13 +243,13 @@ int main(){
     printf ("\nEVAL\n");
     x = eval(x, y);
 
-    printf ("x: %d\n", x);
-    printf ("0: %o\n", x);
-    printf ("0x: %x\n", x);
-    printf ("tag(x): %d\n", tag (x));
-    printf ("val(x): %d\n", val (x));
-    printf ("car(x): %d\n", car (x));
-    printf ("cdr(x): %d\n", cdr (x));
+    //printf ("x: %d\n", x);
+    //printf ("0: %o\n", x);
+    //printf ("0x: %x\n", x);
+    //printf ("tag(x): %d\n", tag (x));
+    //printf ("val(x): %d\n", val (x));
+    //printf ("car(x): %d\n", car (x));
+    //printf ("cdr(x): %d\n", cdr (x));
     prn (x); printf("\n");
     prnlst(x);
 
