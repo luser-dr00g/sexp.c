@@ -71,7 +71,7 @@ val(x){R x>>2;}
 enc(x){R strchr(ENCODING,x)-ENCODING;}
 atom(char *x){char*p=x;
     //if (!strchr(ENCODING,*x)) R 0;
-    printf("atom(%s)=",x);
+    //printf("atom(%s)=",x);
     unsigned int r;
     if (!*p) r=(enc(' ')+44)%64;
     else {
@@ -81,7 +81,7 @@ atom(char *x){char*p=x;
                 r|=(enc(*p)<<(6*(p-x)));
     }
     r= (r<<2)|1;
-    printf("%u\n", r);
+    //printf("%u\n", r);
     R r;
 }  /*constructors*/
 number(x){R(x<<2)|3;}
@@ -129,7 +129,7 @@ append(x,y){R null(x)?y:cons(car(x),append(cdr(x),y));}  /*association lists [^j
 among(x,y){R!null(y)&&equal(x,car(y))||among(x,cdr(y));}
 pair(x,y){R null(x)&&null(y)?NIL:consp(x)&&consp(y)?
         cons(list(car(x),car(y)),pair(cdr(x),cdr(y))):0;}
-assoc(x,y){R eq(caar(y),x)?cadar(y):assoc(x,cdr(y));}
+assoc(x,y){R eq(caar(y),x)?cadar(y):null(y)?0:assoc(x,cdr(y));}
 
 sub2(x,z){R null(x)?z:eq(caar(x),z)?cadar(x):sub2(cdr(x),z);}  /*the universal function eval() [^jmc]*/
 sublis(x,y){R atomp(y)?sub2(x,y):cons(sublis(x,car(y)),sublis(x,cdr(y)));}
@@ -141,7 +141,7 @@ eval(e,a){R numberp(e)?e:
     /*QUOTE*/      eq(car(e),atom("QUOTE"))?cadr(e):
     /*ATOM*/       eq(car(e),atom("ATOM"))? atomp(eval(cadr(e),a)):
     /*EQ*/         eq(car(e),atom("EQ"))?   eval(cadr(e),a)==eval(caddr(e),a):
-    /*COND*/       eq(car(e),atom("COND"))? evcon(cadr(e),a):
+    /*COND*/       eq(car(e),atom("COND"))? evcon(cdr(e),a):
     /*CAR*/        eq(car(e),atom("CAR"))?  car(eval(cadr(e),a)):
     /*CDR*/        eq(car(e),atom("CDR"))?  cdr(eval(cadr(e),a)):
     /*CONS*/       eq(car(e),atom("CONS"))? cons(eval(cadr(e),a),eval(caddr(e),a)):
@@ -179,7 +179,7 @@ prn(x){atomp(x)?prnatom(x)/*printf("%c ",val(x)+ALPHA)*/: /*print with dot-notat
 prnlst(x){x==NIL?0:!consp(x)?prn(x):printf("( "),prnrem(x);} /*print with list-notation [^stackoverflow]*/
 prnrem(x){if(x==NIL)R;// printf(")0 ");
     if(car(x)!=NIL)prn(car(x));
-    else R;
+    else R
     null(cdr(x))?printf(") "):
     !listp(cdr(x))?prn(cdr(x)),printf(") "):
     prnlst(car(cdr(x))),prnrem(cdr(cdr(x))),printf(") ");}
