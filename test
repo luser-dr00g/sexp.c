@@ -1,10 +1,9 @@
-#!/bin/sh
-echo '(QUOTE A)' | ./sexp
-echo '(CAR (QUOTE (A B C)))' | ./sexp
-echo '(CDR (QUOTE (A B C)))' | ./sexp
-echo '(CONS (QUOTE A) (QUOTE (B C)))' | ./sexp
-echo '(EQ (CAR (QUOTE (A B))) (QUOTE A))' | ./sexp
-echo '(ATOM (QUOTE A))' | ./sexp
-echo '(COND ((ATOM (QUOTE A))(QUOTE B))((QUOTE T)(QUOTE C)))' | ./sexp
-echo '((LAMBD (X Y) (CONS (CAR X) Y)) (QUOTE (A B)) (CDR (QUOTE (C D))))' | ./sexp
-echo '((LABEL FF (LAMBD (X)(COND ((ATOM X) X) ((QUOTE T)(FF (CAR X))))))(QUOTE ((A B) C)))' | ./sexp
+(QUOTE A)
+(CAR (QUOTE (A B C)))
+(CDR (QUOTE (A B C)))
+(CONS (QUOTE A) (QUOTE (B C)))
+(EQ (CAR (QUOTE (A B))) (QUOTE A))
+(ATOM (QUOTE A))
+(COND ((ATOM (QUOTE A))(QUOTE B))((QUOTE T)(QUOTE C)))
+((LAMBD (X Y) (CONS (CAR X) Y)) (QUOTE (A B)) (CDR (QUOTE (C D))))
+((LABEL FF (LAMBD (X)(COND ((ATOM X) X) ((QUOTE T)(FF (CAR X))))))(QUOTE ((A B) C)))

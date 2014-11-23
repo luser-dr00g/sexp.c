@@ -73,7 +73,7 @@ atom(char *x){char*p=x;
     //if (!strchr(ENCODING,*x)) R 0;
     //printf("atom(%s)=",x);
     unsigned int r;
-    if (!*p) r=(enc(' ')+44)%64;
+    if (!*p) r=(enc(' ')+44)%64; /* ie. unsigned -20 (%64) but keeping everything positive. */
     else {
         r=(enc(*p)+44)%64;
         while(*++p)
@@ -160,7 +160,7 @@ prnatom(unsigned x){
     unsigned int a;
     x>>=2;
     a=x&0x3f;
-    a=(a + 20) % 64;
+    a=(a + 20) % 64;  /* undo the bias at 'T' */
     for(i=0;i<6;i++) {
         //printf("%u:%c ", a, ENCODING[a]);
         if (ENCODING[a]==' ') break;
@@ -182,7 +182,7 @@ prnrem(x){if(x==NIL)R;// printf(")0 ");
     else R;
     null(cdr(x))?printf(") "):
     !listp(cdr(x))?prn(cdr(x)),printf(") "):
-    prnlst(car(cdr(x))),prnrem(cdr(cdr(x))),printf(") ");}
+    prnlst(car(cdr(x))),prnrem(cdr(cdr(x)))/*,printf(") ")*/;}
 
 #define LPAR "("
 #define RPAR ")"
@@ -227,31 +227,36 @@ int main(){
     //s = "( (L (Q X) (Q (X X X))) (Q Y) )";
     //s = "(L (X) Y)";
     //s = "( (L (X) (X Z)) (Q Q) )"; // -> 'Z'
-    fgets(s,sizeof s,stdin);
-    s[strlen(s)-1]=0;
-    p = s;
-    a = rd (&p);
-    printf ("%s\n", s);
+    do {
+        printf(">");
+        fflush(0);
+        if (!fgets(s,sizeof s,stdin))
+            break;
+        s[strlen(s)-1]=0;
+        p = s;
+        a = rd (&p);
+        printf ("%s\n", s);
 
-    int x, y;
-    x = a;
-    y = NIL;
+        int x, y;
+        x = a;
+        y = NIL;
 
-    prn(x); printf("\n");
-    prnlst(x);
-    fflush(0);
-    printf ("\nEVAL\n");
-    x = eval(x, y);
+        //prn(x); printf("\n");
+        //prnlst(x);
+        //fflush(0);
+        //printf ("\nEVAL\n");
+        x = eval(x, y);
 
-    //printf ("x: %d\n", x);
-    //printf ("0: %o\n", x);
-    //printf ("0x: %x\n", x);
-    //printf ("tag(x): %d\n", tag (x));
-    //printf ("val(x): %d\n", val (x));
-    //printf ("car(x): %d\n", car (x));
-    //printf ("cdr(x): %d\n", cdr (x));
-    prn (x); printf("\n");
-    prnlst(x);
+        //printf ("x: %d\n", x);
+        //printf ("0: %o\n", x);
+        //printf ("0x: %x\n", x);
+        //printf ("tag(x): %d\n", tag (x));
+        //printf ("val(x): %d\n", val (x));
+        //printf ("car(x): %d\n", car (x));
+        //printf ("cdr(x): %d\n", cdr (x));
+        //prn (x); printf("\n");
+        prnlst(x); printf("\n");
+    } while(1);
 
     R 0;
 }
