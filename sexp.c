@@ -25,6 +25,9 @@ http://www.cse.sc.edu/~mgv/csce330f13/micromanualLISP.pdf
    [^codegolf jar2]*/
 int*m,*n,msz; /*memory next mem-size*/
 
+/* global environment for REPL and DEFUN */
+int env;
+
 /* each word is interpreted as a 2 bit tag
    and a sizeof(int)*8-2 bit signed number. 32bit int :: 30bit + 2bit tag [^minilisp]*/
 tag(x){R x&3;}
@@ -99,9 +102,12 @@ car(x){R consp(x)?val(x)[m]:0;}
 cdr(x){R consp(x)?val(x)[m+1]:0;}
 caar(x){R car(car(x));}
 cadr(x){R car(cdr(x));}
+cddr(x){R cdr(cdr(x));}
 cadar(x){R car(cdr(car(x)));}
 caddr(x){R car(cdr(cdr(x)));}
+cdddr(x){R cdr(cdr(cdr(x)));}
 caddar(x){R car(cdr(cdr(car(x))));}
+cadddr(x){R car(cdr(cdr(cdr(x))));}
 cons(x,y){int z;R z=n-m,*n++=x,*n++=y,z<<2;} /*allocate cells for x and y and return "pointer"*/
 rplaca(x,y){R consp(x)?val(x)[m]=y:0;}
 rplacd(x,y){R consp(x)?val(x)[m+1]=y:0;}
@@ -145,15 +151,48 @@ eval(e,a){R numberp(e)?e:
     /*CAR*/        eq(car(e),atom("CAR"))?  car(eval(cadr(e),a)):
     /*CDR*/        eq(car(e),atom("CDR"))?  cdr(eval(cadr(e),a)):
     /*CONS*/       eq(car(e),atom("CONS"))? cons(eval(cadr(e),a),eval(caddr(e),a)):
+    /*DEFUN*/      eq(car(e),atom("DEFUN"))?
+               (a=list(atom("LABEL"),cadr(e),list(atom("LAMBD"),caddr(e),cadddr(e))),
+               env=append(env, list(list(cadr(e),a))),
+               a):
         eval(cons(assoc(car(e),a),cdr(e)),a)): /*cf. Roots of Lisp*/
         //eval(cons(assoc(car(e),a),evlis(cdr(e),a)),a) ):
     eq(caar(e),atom("LABEL"))? /*LABEL*/
         eval(cons(caddar(e),cdr(e)),cons(list(cadar(e),car(e)),a)):
     eq(caar(e),atom("LAMBD"))? /*LAMBDA*/
-        eval(caddar(e),append(pair(cadar(e),evlis(cdr(e),a)),a)):0;}
+        eval(caddar(e),append(pair(cadar(e),evlis(cdr(e),a)),a)):
+    0;}
 evcon(c,a){R eval(caar(c),a)?eval(cadar(c),a):evcon(cdr(c),a);}
 evlis(m,a){R null(m)?NIL:cons(eval(car(m),a),evlis(cdr(m),a));}
 maplist(x,f){R null(x)?NIL:cons(apply(f,x),maplist(cdr(x),f));}
+
+/*
+    car   cadr caddr cadddr
+   (DEFUN NULL (X)   (EQ X NIL))
+               cddr
+    [DEFUN |]
+          [NULL |]
+               [|    |]
+               [X.0] [EQ |]
+                        [X |]
+                          [NIL.0]
+
+   NULL :: (LABEL NULL (LAMBDA (X)(EQ X NIL)))
+           [LABEL |]
+                 [NULL |]
+                      [|.0]
+                      [LAMBDA |]
+                             [|    |]
+                             [X.0] [EQ |]
+                                      [X |]
+                                        [NIL.0]
+                        
+   cadr(e) cons(atom("LABEL"),cons(cadr(e),cons(atom("LAMBDA"),cddr(e))))
+>(LABEL NULL(LAMBD(X)(EQ X NIL)))
+(LABEL NULL(LAMBD(X)(EQ X NIL)))
+( LABEL . ( NULL . ( ( LAMBD . ( ( X . NIL ) . ( ( EQ . ( X . ( NIL . NIL ) ) ) . NIL ) ) ) . NIL ) ) ) 
+
+   */
 
 prnatom(unsigned x){
     int i;
@@ -214,38 +253,28 @@ int main(){
     //char *s;
     char s[BUFSIZ];
     char *p;
-    int a;
+    int x;
 
     assert((-1>>1)==-1);	/*require 2's-complement and right-shift must be sign-preserving */
     n=m=sbrk(sizeof(int)*(msz=getpagesize()));*n++=0;*n++=0; /*initialize memory and begin at cell 2*/
     //signal(SIGSEGV,fix); /*might let it run longer, obscures problems*/
 
-    //s = "(Q (A (Q X)))";
-    //s = "(1 2 3 4 5)";
-    //s = "(E (Q X) (Q X))";
-    //s = "(C (Q X) (Q (A B C)))";
-    //s = "( (L (Q X) (Q (X X X))) (Q Y) )";
-    //s = "(L (X) Y)";
-    //s = "( (L (X) (X Z)) (Q Q) )"; // -> 'Z'
-    do {
+    env = NIL;
+    while(1) {
         printf(">");
         fflush(0);
         if (!fgets(s,sizeof s,stdin))
             break;
         s[strlen(s)-1]=0;
         p = s;
-        a = rd (&p);
-        printf ("%s\n", s);
-
-        int x, y;
-        x = a;
-        y = NIL;
+        x = rd (&p);
+        //printf ("%s\n", s);
 
         //prn(x); printf("\n");
         //prnlst(x);
         //fflush(0);
         //printf ("\nEVAL\n");
-        x = eval(x, y);
+        x = eval(x, env);
 
         //printf ("x: %d\n", x);
         //printf ("0: %o\n", x);
@@ -256,7 +285,9 @@ int main(){
         //printf ("cdr(x): %d\n", cdr (x));
         //prn (x); printf("\n");
         prnlst(x); printf("\n");
-    } while(1);
+        printf("env:\n");
+        prnlst(env); printf("\n");
+    }
 
     R 0;
 }
