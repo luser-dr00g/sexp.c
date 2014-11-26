@@ -9,6 +9,7 @@ http://stackoverflow.com/questions/18096456/why-wont-my-little-lisp-quote
 http://www.cse.sc.edu/~mgv/csce330f13/micromanualLISP.pdf
  */
 #include<assert.h>
+#include<math.h>
 #include<signal.h>
 #include<stdarg.h>
 #include<stdio.h>
@@ -43,8 +44,8 @@ val(x){R x>>2;}
 
    tag  00 : list   : val is "pointer" to 2-cell pair
         01 : atom   : val + 'T' is an ascii code
-        10 : object
-        11 : number
+        10 : object : val is "pointer" to an object struct
+        11 : number : val is a 30bit fixnum
    [^minilisp]
    ____________
    21111111 111_____ ___
@@ -88,6 +89,25 @@ atom(char *x){char*p=x;                  /*constructors*/
     R r;
 }
 number(x){R(x<<2)|3;}
+object(x){R(x<<2)|2;}
+enum { SUBR = 1, FSUBR };
+union object { int tag;
+      struct { int tag; int (*f)(); } f1;
+      struct { int tag; int (*f)(); } s1;
+};
+subr1(int(*f)()){
+    union object *o = (union object *)n; n+=(int)ceil((double)sizeof*o/sizeof*n);
+    o->s1.tag = SUBR;
+    o->s1.f = f;
+    return object((int*)o-m);
+}
+fsubr1(int(*f)()){
+    union object *o = (union object *)n; n+=(int)ceil((double)sizeof*o/sizeof*n);
+    o->f1.tag = FSUBR;
+    o->f1.f = f;
+    return object((int*)o-m);
+}
+
 listp(x){R tag(x)==0;}              /*predicates*/
 atomp(x){R tag(x)==1;}
 objectp(x){R tag(x)==2;}
@@ -141,7 +161,9 @@ sub2(x,z){R null(x)?z:eq(caar(x),z)?cadar(x):sub2(cdr(x),z);}  /*the universal f
 sublis(x,y){R atomp(y)?sub2(x,y):cons(sublis(x,car(y)),sublis(x,cdr(y)));}
 apply(f,args){R eval(cons(f,appq(args)),NIL);}
 appq(m){R null(m)?NIL:cons(list(atom("QUOTE"),car(m)),appq(cdr(m)));}
-eval(e,a){R numberp(e)?e:
+eval(e,a){
+    prnlst(e); printf("\n");
+    R numberp(e)?e:
     atomp(e)?assoc(e,a):
     atomp(car(e))?(
     /*QUOTE*/      eq(car(e),atom("QUOTE"))?cadr(e):
@@ -156,6 +178,7 @@ eval(e,a){R numberp(e)?e:
                        env=append(env, list(list(cadr(e),a))), a):
         eval(cons(assoc(car(e),a),cdr(e)),a)): /*cf. Roots of Lisp*/
         //eval(cons(assoc(car(e),a),evlis(cdr(e),a)),a) ):
+    objectp(car(e))?evobj(e,a):
     eq(caar(e),atom("LABEL"))? /*LABEL*/
         eval(cons(caddar(e),cdr(e)),cons(list(cadar(e),car(e)),a)):
     eq(caar(e),atom("LAMBD"))? /*LAMBDA*/
@@ -163,6 +186,14 @@ eval(e,a){R numberp(e)?e:
     0;}
 evcon(c,a){R eval(caar(c),a)?eval(cadar(c),a):evcon(cdr(c),a);}
 evlis(m,a){R null(m)?NIL:cons(eval(car(m),a),evlis(cdr(m),a));}
+evobj(e,a){
+    union object o = *(union object*)(m+val(car(e)));
+    switch(o.tag){
+    default: R 0;
+    case SUBR: R o.s1.f(eval(cadr(e),a));
+    case FSUBR: R o.f1.f(cdr(e));
+    }
+}
 maplist(x,f){R null(x)?NIL:cons(apply(f,x),maplist(cdr(x),f));}
 
 /*
@@ -262,11 +293,17 @@ int main(){
     int x;
 
     assert((-1>>1)==-1);	/*require 2's-complement and right-shift must be sign-preserving */
+    printf("");  /* exercise stdio so it (hopefully) malloc's what it needs before we take sbrk() */
+    snprintf(NULL, 0, "%c%d%f", 'x', 42, 72.27);
     n=m=sbrk(sizeof(int)*(msz=getpagesize()));*n++=0;*n++=0; /*initialize memory and begin at cell 2*/
     //signal(SIGSEGV,fix); /*might let it run longer, obscures problems*/
 
     env = NIL;
+    env = append(env,list(list(atom("CAAR"),subr1(caar))));
+    env = append(env,list(list(atom("CADR"),subr1(cadr))));
+
     while(1) {
+        printf("env:\n"); prnlst(env); printf("\n");
         printf(">");
         fflush(0);
         if (!fgets(s,sizeof s,stdin))
@@ -291,8 +328,6 @@ int main(){
         //printf ("cdr(x): %d\n", cdr (x));
         //prn (x); printf("\n");
         prnlst(x); printf("\n");
-        printf("env:\n");
-        prnlst(env); printf("\n");
     }
 
     R 0;
