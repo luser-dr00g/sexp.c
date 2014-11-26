@@ -127,7 +127,7 @@ null(x){R listp(x)&&(val(x)==0);}  /*list == NIL?*/
  */
 lista(int c,int*a){int z=NIL;for(;c;)z=cons(a[--c],z);R z;}
 listn(int c,...){va_list a;int*z=n;
-    va_start(a,c);for(;c--;)*n++=va_arg(a,int);va_end (a);
+    va_start(a,c);for(;c--;)*n++=va_arg(a,int);va_end(a);
     c=n-z;R lista(c,z);}
 #define list(...) listn(PP_NARG(__VA_ARGS__),__VA_ARGS__)
 
@@ -237,7 +237,12 @@ rd(char**p){int i,t,u,v,z; /*read a list [^stackoverflow]*/
             while(u=rd(p),!eq(u,atom(RPAR)))u=cons(u,NIL),z=append(z,u);
         }
         R z;}
-    if(**p>='0'&&**p<='9')R++(*p),number(*((*p)-1)-'0');
+    if(**p>='0'&&**p<='9'){
+        int v = **p - '0';
+        while(*++*p>='0'&&**p<='9') v*=10, v+=**p-'0';
+        R number(v);
+        //R++*p,number((*p)[-1]-'0');
+    }
     for(i=0;i<-1+sizeof boffo;i++){
         if (isspace((*p)[i]) || (*p)[i]=='\0') break;
         if (!strchr(ENCODING,(*p)[i])) break;
