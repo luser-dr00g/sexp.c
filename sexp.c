@@ -59,7 +59,7 @@ val(x){R x>>2;}
    0          111111 11112222 22222233 33333333 44444444 44555555 5555 6666
    01234567 89012345 67890123 45678901 23456789 01234567 89012345 6789 0123  <- general position
 
-  " ABCDEFG HIJKLMNO PQRSTUVW XYZ_ahcd efghijkl mnopqrst uvwxyz01 2345 6789"
+  " ABCDEFG HIJKLMNO PQRSTUVW XYZ_abcd efghijkl mnopqrst uvwxyz)1 2345 6789"
 
    -------- -------- ----
    21111111 111          0          11 11111111 22222222 22333333 3333 4444
@@ -67,12 +67,12 @@ val(x){R x>>2;}
    44444455 55555555 6666
    45678901 23456789 0123
 */
-#define ENCODING " ABCDEFGHIJKLMNOPQRSTUVWXYZ_ahcdefghijklmnopqrstuvwxyz()23456789"
+#define ENCODING " ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz)123456789"
 #define ALPHA "T"
 #define NIL   (0)
 #define T atom(ALPHA)
 enc(x){R strchr(ENCODING,x)-ENCODING;}
-atom(char *x){char*p=x;
+atom(char *x){char*p=x;                  /*constructors*/
     //if (!strchr(ENCODING,*x)) R 0;
     //printf("atom(%s)=",x);
     unsigned int r;
@@ -86,9 +86,9 @@ atom(char *x){char*p=x;
     r= (r<<2)|1;
     //printf("%u\n", r);
     R r;
-}  /*constructors*/
+}
 number(x){R(x<<2)|3;}
-listp(x){R tag(x)==0;}       /*predicates*/
+listp(x){R tag(x)==0;}              /*predicates*/
 atomp(x){R tag(x)==1;}
 objectp(x){R tag(x)==2;}
 numberp(x){R tag(x)==3;}
@@ -152,9 +152,8 @@ eval(e,a){R numberp(e)?e:
     /*CDR*/        eq(car(e),atom("CDR"))?  cdr(eval(cadr(e),a)):
     /*CONS*/       eq(car(e),atom("CONS"))? cons(eval(cadr(e),a),eval(caddr(e),a)):
     /*DEFUN*/      eq(car(e),atom("DEFUN"))?
-               (a=list(atom("LABEL"),cadr(e),list(atom("LAMBD"),caddr(e),cadddr(e))),
-               env=append(env, list(list(cadr(e),a))),
-               a):
+                       (a=list(atom("LABEL"),cadr(e),list(atom("LAMBD"),caddr(e),cadddr(e))),
+                       env=append(env, list(list(cadr(e),a))), a):
         eval(cons(assoc(car(e),a),cdr(e)),a)): /*cf. Roots of Lisp*/
         //eval(cons(assoc(car(e),a),evlis(cdr(e),a)),a) ):
     eq(caar(e),atom("LABEL"))? /*LABEL*/
@@ -215,7 +214,7 @@ prn(x){atomp(x)?prnatom(x)/*printf("%c ",val(x)+ALPHA)*/: /*print with dot-notat
     consp(x)?printf("( "),prn(car(x)),printf(". "),prn(cdr(x)),printf(") "):
     printf("NIL ");}
 
-prnlst(x){x==NIL?0:!consp(x)?prn(x):printf("( "),prnrem(x);} /*print with list-notation [^stackoverflow]*/
+prnlst(x){x==NIL?printf("NIL"):!consp(x)?prn(x):printf("( "),prnrem(x);} /*print with list-notation [^stackoverflow]*/
 prnrem(x){if(x==NIL)R;// printf(")0 ");
     if(car(x)!=NIL)prn(car(x));
     else R;
@@ -233,8 +232,10 @@ rd(char**p){int i,t,u,v,z; /*read a list [^stackoverflow]*/
     if(**p==*LPAR){++(*p);
         z=NIL;
         u=rd(p);
-        z=cons(u,NIL);
-        while(u=rd(p),!eq(u,atom(RPAR)))u=cons(u,NIL),z=append(z,u);
+        if (u!=atom(RPAR)){
+            z=cons(u,NIL);
+            while(u=rd(p),!eq(u,atom(RPAR)))u=cons(u,NIL),z=append(z,u);
+        }
         R z;}
     if(**p>='0'&&**p<='9')R++(*p),number(*((*p)-1)-'0');
     for(i=0;i<-1+sizeof boffo;i++){
