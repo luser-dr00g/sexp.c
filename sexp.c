@@ -1,12 +1,13 @@
-/*cf.
-http://www.ioccc.org/1989/jar.2.c
-http://leon.bottou.org/projects/minilisp
-http://www.jsoftware.com/jwiki/Essays/Incunabulum
-http://www-formal.stanford.edu/jmc/recursive/recursive.html
-http://www.paulgraham.com/rootsoflisp.html
+/* sexp.c - an "implicit int" tiny lisp.
+cf.
+http://www.ioccc.org/1989/jar.2.c                  <-- memory 'cursors'
+http://leon.bottou.org/projects/minilisp           <-- compact 'C'-able cell encoding
+http://www.jsoftware.com/jwiki/Essays/Incunabulum  <-- tiny APL interpreter
+http://www-formal.stanford.edu/jmc/recursive/recursive.html  <-- original lisp paper
+http://www.paulgraham.com/rootsoflisp.html                   <-- alternate presentation of core (with bugfix)
+http://www.cse.sc.edu/~mgv/csce330f13/micromanualLISP.pdf    <-- original micro-manual for lisp
 http://codegolf.stackexchange.com/questions/284/write-an-interpreter-for-the-untyped-lambda-calculus/3290#3290
-http://stackoverflow.com/questions/18096456/why-wont-my-little-lisp-quote
-http://www.cse.sc.edu/~mgv/csce330f13/micromanualLISP.pdf
+http://stackoverflow.com/questions/18096456/why-wont-my-little-lisp-quote  <-- earlier version of this program
  */
 #include<assert.h>
 #include<math.h>
@@ -43,8 +44,9 @@ val(x){R x>>2;}
                  word 8  ::   30bit 2 + 2bit 00 :: the list at address 2
 
    tag  00 : list   : val is "pointer" to 2-cell pair
-        01 : atom   : val + 'T' is an ascii code
-        10 : object : val is "pointer" to an object struct
+        01 : atom   : val is encoded as 5 6-bit codes packed low-to-high,
+                                        with the first code biased at `enc('T')` (ie. 20)
+        10 : object : val is "pointer" to an object union
         11 : number : val is a 30bit fixnum
    [^minilisp]
    ____________
@@ -162,7 +164,7 @@ sublis(x,y){R atomp(y)?sub2(x,y):cons(sublis(x,car(y)),sublis(x,cdr(y)));}
 apply(f,args){R eval(cons(f,appq(args)),NIL);}
 appq(m){R null(m)?NIL:cons(list(atom("QUOTE"),car(m)),appq(cdr(m)));}
 eval(e,a){
-    prnlst(e); printf("\n");
+    //prnlst(e); printf("\n");
     R numberp(e)?e:
     atomp(e)?assoc(e,a):
     atomp(car(e))?(
@@ -176,12 +178,12 @@ eval(e,a){
     /*DEFUN*/      eq(car(e),atom("DEFUN"))?
                        (a=list(atom("LABEL"),cadr(e),list(atom("LAMBD"),caddr(e),cadddr(e))),
                        env=append(env, list(list(cadr(e),a))), a):
-        eval(cons(assoc(car(e),a),cdr(e)),a)): /*cf. Roots of Lisp*/
-        //eval(cons(assoc(car(e),a),evlis(cdr(e),a)),a) ):
+        eval(cons(assoc(car(e),a),cdr(e)),a)):
+        //eval(cons(assoc(car(e),a),evlis(cdr(e),a)),a) ): /*^rootsoflisp*/
     objectp(car(e))?evobj(e,a):
     eq(caar(e),atom("LABEL"))? /*LABEL*/
         eval(cons(caddar(e),cdr(e)),cons(list(cadar(e),car(e)),a)):
-    eq(caar(e),atom("LAMBD"))? /*LAMBDA*/
+    eq(caar(e),atom("LAMBD"))? /*LAMBDA with 5-char atoms */
         eval(caddar(e),append(pair(cadar(e),evlis(cdr(e),a)),a)):
     0;}
 evcon(c,a){R eval(caar(c),a)?eval(cadar(c),a):evcon(cdr(c),a);}
@@ -196,7 +198,7 @@ evobj(e,a){
 }
 maplist(x,f){R null(x)?NIL:cons(apply(f,x),maplist(cdr(x),f));}
 
-/*
+/* (DEFUN X (Y) (Z)) expands to (X (LABEL X (LAMBDA (Y) (Z)))) and appends to env.
     car   cadr caddr cadddr
    (DEFUN NULL (X)   (EQ X NIL))
                cddr
@@ -285,7 +287,7 @@ rd(char**p){int i,t,u,v,z; /*read a list [^stackoverflow]*/
     R atom(boffo);
 }
 
-void fix(x){signal(SIGSEGV,fix);sbrk(msz);msz*=2;} /*grow memory in response to memory-access fault*/
+void fix(x){signal(SIGSEGV,fix);sbrk(sizeof(int)*(msz*=2));} /*grow memory in response to memory-access fault*/
 int main(){
     //char *s;
     char s[BUFSIZ];
@@ -303,8 +305,8 @@ int main(){
     env = append(env,list(list(atom("CADR"),subr1(cadr))));
 
     while(1) {
-        printf("env:\n"); prnlst(env); printf("\n");
-        printf(">");
+        //printf("env:\n"); prnlst(env); printf("\n");
+        //printf(">");
         fflush(0);
         if (!fgets(s,sizeof s,stdin))
             break;
