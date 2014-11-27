@@ -8,6 +8,7 @@ http://www.paulgraham.com/rootsoflisp.html                   <-- alternate prese
 http://www.cse.sc.edu/~mgv/csce330f13/micromanualLISP.pdf    <-- original micro-manual for lisp
 http://codegolf.stackexchange.com/questions/284/write-an-interpreter-for-the-untyped-lambda-calculus/3290#3290
 http://stackoverflow.com/questions/18096456/why-wont-my-little-lisp-quote  <-- earlier version of this program
+http://www.nhplace.com/kent/Papers/Special-Forms.html   <-- FEXPRs NLAMBDAs and MACROs, oh my!
  */
 #include<assert.h>
 #include<math.h>
@@ -92,10 +93,12 @@ atom(char *x){char*p=x;                  /*constructors*/
 }
 number(x){R(x<<2)|3;}
 object(x){R(x<<2)|2;}
-enum { SUBR = 1, FSUBR };
+enum { SUBR = 1, FSUBR, SUBR2, FSUBR2 };
 union object { int tag;
       struct { int tag; int (*f)(); } f1;
       struct { int tag; int (*f)(); } s1;
+      struct { int tag; int (*f)(); } f2;
+      struct { int tag; int (*f)(); } s2;
 };
 subr1(int(*f)()){
     union object *o = (union object *)n; n+=(int)ceil((double)sizeof*o/sizeof*n);
@@ -107,6 +110,18 @@ fsubr1(int(*f)()){
     union object *o = (union object *)n; n+=(int)ceil((double)sizeof*o/sizeof*n);
     o->f1.tag = FSUBR;
     o->f1.f = f;
+    return object((int*)o-m);
+}
+subr2(int(*f)()){
+    union object *o = (union object *)n; n+=(int)ceil((double)sizeof*o/sizeof*n);
+    o->s2.tag = SUBR2;
+    o->s2.f = f;
+    return object((int*)o-m);
+}
+fsubr2(int(*f)()){
+    union object *o = (union object *)n; n+=(int)ceil((double)sizeof*o/sizeof*n);
+    o->f2.tag = FSUBR2;
+    o->f2.f = f;
     return object((int*)o-m);
 }
 
@@ -164,18 +179,18 @@ sublis(x,y){R atomp(y)?sub2(x,y):cons(sublis(x,car(y)),sublis(x,cdr(y)));}
 apply(f,args){R eval(cons(f,appq(args)),NIL);}
 appq(m){R null(m)?NIL:cons(list(atom("QUOTE"),car(m)),appq(cdr(m)));}
 eval(e,a){
-    //prnlst(e); printf("\n");
+    prnlst(e); printf("\n");
     R numberp(e)?e:
     atomp(e)?assoc(e,a):
     atomp(car(e))?(
-    /*QUOTE*/      eq(car(e),atom("QUOTE"))?cadr(e):
-    /*ATOM*/       eq(car(e),atom("ATOM"))? atomp(eval(cadr(e),a)):
-    /*EQ*/         eq(car(e),atom("EQ"))?   eval(cadr(e),a)==eval(caddr(e),a):
-    /*COND*/       eq(car(e),atom("COND"))? evcon(cdr(e),a):
-    /*CAR*/        eq(car(e),atom("CAR"))?  car(eval(cadr(e),a)):
-    /*CDR*/        eq(car(e),atom("CDR"))?  cdr(eval(cadr(e),a)):
-    /*CONS*/       eq(car(e),atom("CONS"))? cons(eval(cadr(e),a),eval(caddr(e),a)):
-    /*DEFUN*/      eq(car(e),atom("DEFUN"))?
+                   eq(car(e),atom("QUOTE"))?cadr(e):
+                   eq(car(e),atom("ATOM"))? atomp(eval(cadr(e),a)):
+                   eq(car(e),atom("EQ"))?   eval(cadr(e),a)==eval(caddr(e),a):
+                   eq(car(e),atom("COND"))? evcon(cdr(e),a):
+                   eq(car(e),atom("CAR"))?  car(eval(cadr(e),a)):
+                   eq(car(e),atom("CDR"))?  cdr(eval(cadr(e),a)):
+                   eq(car(e),atom("CONS"))? cons(eval(cadr(e),a),eval(caddr(e),a)):
+                   eq(car(e),atom("DEFUN"))?
                        (a=list(atom("LABEL"),cadr(e),list(atom("LAMBD"),caddr(e),cadddr(e))),
                        env=append(env, list(list(cadr(e),a))), a):
         eval(cons(assoc(car(e),a),cdr(e)),a)):
@@ -194,37 +209,21 @@ evobj(e,a){
     default: R 0;
     case SUBR: R o.s1.f(eval(cadr(e),a));
     case FSUBR: R o.f1.f(cdr(e));
+    case SUBR2: R o.s2.f(eval(cadr(e),a),eval(caddr(e),a));
+    case FSUBR2: R o.f2.f(cadr(e),caddr(e));
     }
 }
 maplist(x,f){R null(x)?NIL:cons(apply(f,x),maplist(cdr(x),f));}
 
-/* (DEFUN X (Y) (Z)) expands to (X (LABEL X (LAMBDA (Y) (Z)))) and appends to env.
-    car   cadr caddr cadddr
-   (DEFUN NULL (X)   (EQ X NIL))
-               cddr
-    [DEFUN |]
-          [NULL |]
-               [|    |]
-               [X.0] [EQ |]
-                        [X |]
-                          [NIL.0]
-
-   NULL :: (LABEL NULL (LAMBDA (X)(EQ X NIL)))
-           [LABEL |]
-                 [NULL |]
-                      [|.0]
-                      [LAMBDA |]
-                             [|    |]
-                             [X.0] [EQ |]
-                                      [X |]
-                                        [NIL.0]
-                        
-   cadr(e) cons(atom("LABEL"),cons(cadr(e),cons(atom("LAMBDA"),cddr(e))))
->(LABEL NULL(LAMBD(X)(EQ X NIL)))
-(LABEL NULL(LAMBD(X)(EQ X NIL)))
-( LABEL . ( NULL . ( ( LAMBD . ( ( X . NIL ) . ( ( EQ . ( X . ( NIL . NIL ) ) ) . NIL ) ) ) . NIL ) ) ) 
-
-   */
+assocpair(x,y){R eq(caar(y),x)?car(y):null(y)?0:assocpair(x,cdr(y));}
+set(x,y){
+    int a=assocpair(x,env);
+    if (a)
+        rplacd(a,list(y));
+    else
+        env=append(env,list(list(x,y)));
+    R y;
+}
 
 prnatom(unsigned x){
     int i;
@@ -300,13 +299,20 @@ int main(){
     n=m=sbrk(sizeof(int)*(msz=getpagesize()));*n++=0;*n++=0; /*initialize memory and begin at cell 2*/
     //signal(SIGSEGV,fix); /*might let it run longer, obscures problems*/
 
-    env = NIL;
-    env = append(env,list(list(atom("CAAR"),subr1(caar))));
-    env = append(env,list(list(atom("CADR"),subr1(cadr))));
+    env = list(
+            list(atom("CAAR"),subr1(caar)),
+            list(atom("CADR"),subr1(cadr)),
+            list(atom("CDDR"),subr1(cddr)),
+            list(atom("CADAR"),subr1(cadar)),
+            list(atom("CADDR"),subr1(caddr)),
+            list(atom("CDDDR"),subr1(cdddr)),
+            list(atom("SET"),subr2(set)),
+            list(atom("SETQ"),fsubr2(set))
+            );
 
     while(1) {
-        //printf("env:\n"); prnlst(env); printf("\n");
-        //printf(">");
+        printf("env:\n"); prnlst(env); printf("\n");
+        printf(">");
         fflush(0);
         if (!fgets(s,sizeof s,stdin))
             break;
