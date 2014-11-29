@@ -18,8 +18,10 @@ http://www.nhplace.com/kent/Papers/Special-Forms.html   <-- FEXPRs NLAMBDAs and 
 #include<stdlib.h>
 #include<string.h>
 #include<unistd.h>
-#include"ppnarg.h"
+#include"ppnarg.h"   /*https://github.com/luser-dr00g/sexp.c/blob/master/ppnarg.h*/
 #define R return
+#define defun(NAME,ARGS,...) \
+    int NAME ARGS { return __VA_ARGS__; }
 
 /* memory is organized as a large array of ints
    each int is a "word" and memory can be accessed by
@@ -33,8 +35,9 @@ int env;
 
 /* each word is interpreted as a 2 bit tag
    and a sizeof(int)*8-2 bit signed number. 32bit int :: 30bit + 2bit tag [^minilisp]*/
-tag(x){R x&3;}
-val(x){R x>>2;}
+enum { TAGMASK = 03, TAGBITS = 2, TAGCONS = 0, TAGATOM, TAGOBJ, TAGNUM };
+defun(tag,(x),x&TAGMASK)
+defun(val,(x),x>>TAGBITS)
 
 /* bias the alphabet at the ascii code for T,  [<my own brilliant idea]
    this way, the word 1 means 30bit 0 + 2bit 01 :: the symbol T
@@ -75,8 +78,8 @@ val(x){R x>>2;}
 #define ALPHA "T"
 #define NIL   (0)
 #define T atom(ALPHA)
-enc(x){R strchr(ENCODING,x)-ENCODING;}
-atom(char *x){char*p=x;                  /*constructors*/
+defun(enc,(x),strchr(ENCODING,x)-ENCODING)
+int atom(char *x){char*p=x;                  /*constructors*/
     //if (!strchr(ENCODING,*x)) R 0;
     //printf("atom(%s)=",x);
     unsigned int r;
@@ -87,12 +90,12 @@ atom(char *x){char*p=x;                  /*constructors*/
             if (strchr(ENCODING,*p) && !strchr("()",*p))
                 r|=(enc(*p)<<(6*(p-x)));
     }
-    r= (r<<2)|1;
+    r= (r<<TAGBITS)|TAGATOM;
     //printf("%u\n", r);
     R r;
 }
-number(x){R(x<<2)|3;}
-object(x){R(x<<2)|2;}
+defun(number,(x),x<<TAGBITS|TAGNUM)
+defun(object,(x),x<<TAGBITS|TAGOBJ)
 enum { SUBR = 1, FSUBR, SUBR2, FSUBR2 };
 union object { int tag;
       struct { int tag; int (*f)(); } f1;
@@ -125,45 +128,45 @@ fsubr2(int(*f)()){
     return object((int*)o-m);
 }
 
-listp(x){R tag(x)==0;}              /*predicates*/
-atomp(x){R tag(x)==1;}
-objectp(x){R tag(x)==2;}
-numberp(x){R tag(x)==3;}
-consp(x){R x&&listp(x);}
+defun(  listp,(x),tag(x)==TAGCONS) /* predicates */
+defun(  atomp,(x),tag(x)==TAGATOM)
+defun(objectp,(x),tag(x)==TAGOBJ)
+defun(numberp,(x),tag(x)==TAGNUM)
+defun(  consp,(x),x&&listp(x))
 
 /*manipulating lists.
   val() of course returns an int i which indexes `int *m;`
                           our "pointer"           the memory
   using the commutativity of indexing in C: m[i] == *(m + i) == i[m] */
-car(x){R consp(x)?val(x)[m]:0;}
-cdr(x){R consp(x)?val(x)[m+1]:0;}
-caar(x){R car(car(x));}
-cadr(x){R car(cdr(x));}
-cddr(x){R cdr(cdr(x));}
-cadar(x){R car(cdr(car(x)));}
-caddr(x){R car(cdr(cdr(x)));}
-cdddr(x){R cdr(cdr(cdr(x)));}
-caddar(x){R car(cdr(cdr(car(x))));}
-cadddr(x){R car(cdr(cdr(cdr(x))));}
-cons(x,y){int z;R z=n-m,*n++=x,*n++=y,z<<2;} /*allocate cells for x and y and return "pointer"*/
-rplaca(x,y){R consp(x)?val(x)[m]=y:0;}
-rplacd(x,y){R consp(x)?val(x)[m+1]=y:0;}
+defun(cons,(x,y),*n++=x,*n++=y,(n-m)-2<<TAGBITS|TAGCONS)
+defun(rplaca,(x,y),consp(x)?val(x)[m]=y:0)
+defun(rplacd,(x,y),consp(x)?val(x)[m+1]=y:0)
+defun(car,(x),consp(x)?val(x)[m]:0)
+defun(cdr,(x),consp(x)?val(x)[m+1]:0)
+defun(caar,(x),car(car(x)))
+defun(cadr,(x),car(cdr(x)))
+defun(cddr,(x),cdr(cdr(x)))
+defun(cadar,(x),car(cdr(car(x))))
+defun(caddr,(x),car(cdr(cdr(x))))
+defun(cdddr,(x),cdr(cdr(cdr(x))))
+defun(caddar,(x),car(cdr(cdr(car(x)))))
+defun(cadddr,(x),car(cdr(cdr(cdr(x)))))
 
-eq(x,y){R atomp(x)&&atomp(y)?x==y:0;}  /*atoms eq?*/
-ff(x){R atomp(x)?x:ff(car(x));} /*find first*/
-subst(x,y,z){R atomp(z)?(eq(z,y)?x:z):
-    cons(subst(x,y,car(z)),subst(x,y,cdr(z)));}
-equal(x,y){R (atomp(x)&&atomp(y)&&eq(x,y))
-    ||(consp(x)&&consp(y)&&equal(car(x),car(y))&&equal(cdr(x),cdr(y)));}  /*lists equal?*/
-null(x){R listp(x)&&(val(x)==0);}  /*list == NIL?*/
+defun(eq,(x,y),x==y)
+defun(ff,(x),atomp(x)?x:ff(car(x))) /* find first atom */
+defun(subst,(x,y,z),atomp(z)?(eq(z,y)?x:z): cons(subst(x,y,car(z)),subst(x,y,cdr(z))))
+defun(equal,(x,y),(atomp(x)&&atomp(y)&&eq(x,y))
+        ||(consp(x)&&consp(y)&&equal(car(x),car(y))&&equal(cdr(x),cdr(y)))) /*lists equal?*/
+defun(null,(x),listp(x)&&val(x)==0) /*list == NIL?*/
 
 /*build lists
   list() variadic macro uses ppnarg.h to count the arguments and call listn
+https://github.com/luser-dr00g/sexp.c/blob/master/ppnarg.h
   listn() variadic function copies n (int) arguments to memory and call lista
   lista() constructs a list of n elements from pointer to memory
  */
-lista(int c,int*a){int z=NIL;for(;c;)z=cons(a[--c],z);R z;}
-listn(int c,...){va_list a;int*z=n;
+int lista(int c,int*a){int z=NIL;for(;c;)z=cons(a[--c],z);R z;}
+int listn(int c,...){va_list a;int*z=n;
     va_start(a,c);for(;c--;)*n++=va_arg(a,int);va_end(a);
     c=n-z;R lista(c,z);}
 #define list(...) listn(PP_NARG(__VA_ARGS__),__VA_ARGS__)
