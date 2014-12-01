@@ -1,0 +1,22 @@
+
+RCS file: sexp.c,v
+Working file: sexp.c
+head: 1.2
+branch:
+locks: strict
+	josh: 1.2
+access list:
+symbolic names:
+keyword substitution: kv
+total revisions: 2;	selected revisions: 2
+description:
+sexp.c a micro-minilisp
+----------------------------
+revision 1.2	locked by: josh;
+date: 2013/08/07 05:51:50;  author: josh;  state: Exp;  lines: +31 -40
+reader appears to work now.
+----------------------------
+revision 1.1
+date: 2013/08/06 19:09:25;  author: josh;  state: Exp;
+Initial revision
+=============================================================================
