@@ -19,9 +19,10 @@ http://www.nhplace.com/kent/Papers/Special-Forms.html   <-- FEXPRs NLAMBDAs and 
 #include<string.h>
 #include<unistd.h>
 #include"ppnarg.h"   /*https://github.com/luser-dr00g/sexp.c/blob/master/ppnarg.h*/
-#define R return
+/*defun macro thanks to Kaz Kylheku: https://groups.google.com/d/msg/comp.lang.c/FiC6hbH1azw/-Tiuw2oQoyAJ*/
 #define defun(NAME,ARGS,...) \
     int NAME ARGS { return __VA_ARGS__; }
+
 
 /* memory is organized as a large array of ints
    each int is a "word" and memory can be accessed by
@@ -88,16 +89,16 @@ enum objecttag { SUBR, FSUBR, SUBR2, FSUBR2 };
 union object { int tag;
       struct { int tag; int (*f)(); } f;
 };
-objfunc(enum objecttag t, int(*f)()){
+int objfunc(enum objecttag t, int(*f)()){
     union object *o = (union object *)n; n+=(int)ceil((double)sizeof*o/sizeof*n);
     o->f.tag = t;
     o->f.f = f;
     return object((int*)o-m);
 }
-subr1(int(*f)()){ return objfunc(SUBR,f); }
-fsubr1(int(*f)()){ return objfunc(FSUBR,f); }
-subr2(int(*f)()){ return objfunc(SUBR2,f); }
-fsubr2(int(*f)()){ return objfunc(FSUBR2,f); }
+defun(subr1,(int(*f)()),objfunc(SUBR,f))
+defun(fsubr1,(int(*f)()),objfunc(FSUBR,f))
+defun(subr2,(int(*f)()),objfunc(SUBR2,f))
+defun(fsubr2,(int(*f)()),objfunc(FSUBR2,f))
 
 /*manipulating lists.
   val() of course returns an int i which indexes `int *m;`
@@ -117,24 +118,24 @@ defun(cdddr,(x),cdr(cdr(cdr(x))))
 defun(caddar,(x),car(cdr(cdr(car(x)))))
 defun(cadddr,(x),car(cdr(cdr(cdr(x)))))
 
-defun(eq,(x,y),x==y)
-defun(ff,(x),atomp(x)?x:ff(car(x))) /* find first atom */
-defun(subst,(x,y,z),atomp(z)?(eq(z,y)?x:z): cons(subst(x,y,car(z)),subst(x,y,cdr(z))))
-defun(equal,(x,y),(atomp(x)&&atomp(y)&&eq(x,y))
-        ||(consp(x)&&consp(y)&&equal(car(x),car(y))&&equal(cdr(x),cdr(y)))) /*lists equal?*/
-defun(null,(x),listp(x)&&val(x)==0) /*list == NIL?*/
-
 /*build lists
   list() variadic macro uses ppnarg.h to count the arguments and call listn
 https://github.com/luser-dr00g/sexp.c/blob/master/ppnarg.h
   listn() variadic function copies n (int) arguments to memory and call lista
   lista() constructs a list of n elements from pointer to memory
  */
-int lista(int c,int*a){int z=NIL;for(;c;)z=cons(a[--c],z);R z;}
+int lista(int c,int*a){int z=NIL;for(;c;)z=cons(a[--c],z);return z;}
 int listn(int c,...){va_list a;int*z=n;
     va_start(a,c);for(;c--;)*n++=va_arg(a,int);va_end(a);
-    c=n-z;R lista(c,z);}
+    c=n-z;return lista(c,z);}
 #define list(...) listn(PP_NARG(__VA_ARGS__),__VA_ARGS__)
+
+defun(eq,(x,y),x==y)
+defun(ff,(x),atomp(x)?x:ff(car(x))) /* find first atom */
+defun(subst,(x,y,z),atomp(z)?(eq(z,y)?x:z): cons(subst(x,y,car(z)),subst(x,y,cdr(z))))
+defun(equal,(x,y),(atomp(x)&&atomp(y)&&eq(x,y))
+        ||(consp(x)&&consp(y)&&equal(car(x),car(y))&&equal(cdr(x),cdr(y)))) /*lists equal?*/
+defun(null,(x),listp(x)&&val(x)==0) /*list == NIL?*/
 
 /*association lists [^jmc]*/
 defun(append,(x,y),null(x)?y:cons(car(x),append(cdr(x),y)))
@@ -172,24 +173,24 @@ defun(eval,(e,a),
     0)
 defun(evcon,(c,a),eval(caar(c),a)?eval(cadar(c),a):evcon(cdr(c),a))
 defun(evlis,(m,a),null(m)?NIL:cons(eval(car(m),a),evlis(cdr(m),a)))
-evobj(e,a){
+int evobj(e,a){
     union object o = *(union object*)(m+val(car(e)));
     switch(o.tag){
-    default: R 0;
-    case SUBR: R o.f.f(eval(cadr(e),a));
-    case FSUBR: R o.f.f(cdr(e));
-    case SUBR2: R o.f.f(eval(cadr(e),a),eval(caddr(e),a));
-    case FSUBR2: R o.f.f(cadr(e),caddr(e));
+    default: return 0;
+    case SUBR: return o.f.f(eval(cadr(e),a));
+    case FSUBR: return o.f.f(cdr(e));
+    case SUBR2: return o.f.f(eval(cadr(e),a),eval(caddr(e),a));
+    case FSUBR2: return o.f.f(cadr(e),caddr(e));
     }
 }
 defun(maplist,(x,f),null(x)?NIL:cons(apply(f,x),maplist(cdr(x),f)))
 
 defun(assocpair,(x,y),eq(caar(y),x)?car(y):null(y)?0:assocpair(x,cdr(y)))
-set(x,y){
+int set(x,y){
     int a=assocpair(x,env);
     if (a) rplacd(a,list(y));
-    else env=append(env,list(list(x,y)));
-    R y;
+    else env=append(list(list(x,y)),env);
+    return y;
 }
 
 prnatom(unsigned x){
@@ -214,9 +215,9 @@ prn(x){atomp(x)?prnatom(x): /*print with dot-notation [^stackoverflow]*/
     printf("NIL ");}
 
 prnlst(x){x==NIL?printf("NIL"):!consp(x)?prn(x):printf("( "),prnrem(x);} /*print with list-notation [^stackoverflow]*/
-prnrem(x){if(x==NIL)R;// printf(")0 ");
+prnrem(x){if(x==NIL)return;// printf(")0 ");
     if(car(x)!=NIL)prn(car(x));
-    else R;
+    else return;
     null(cdr(x))?printf(") "):
     !listp(cdr(x))?prn(cdr(x)),printf(") "):
     prnlst(car(cdr(x))),prnrem(cdr(cdr(x)))/*,printf(") ")*/;}
@@ -225,9 +226,9 @@ prnrem(x){if(x==NIL)R;// printf(")0 ");
 #define RPAR ")"
 rd(char**p){int i,t,u,v,z; /*read a list [^stackoverflow]*/
     char boffo[6] = "";
-    if(!(**p))R 0;
-    if(**p==' ')R++(*p),rd(p);
-    if(**p==*RPAR)R++(*p),atom(RPAR);
+    if(!(**p))return 0;
+    if(**p==' ')return++(*p),rd(p);
+    if(**p==*RPAR)return++(*p),atom(RPAR);
     if(**p==*LPAR){++(*p);
         z=NIL;
         u=rd(p);
@@ -235,12 +236,11 @@ rd(char**p){int i,t,u,v,z; /*read a list [^stackoverflow]*/
             z=cons(u,NIL);
             while(u=rd(p),!eq(u,atom(RPAR)))u=cons(u,NIL),z=append(z,u);
         }
-        R z;}
+        return z;}
     if(**p>='0'&&**p<='9'){
         int v = **p - '0';
         while(*++*p>='0'&&**p<='9') v*=10, v+=**p-'0';
-        R number(v);
-        //R++*p,number((*p)[-1]-'0');
+        return number(v);
     }
     for(i=0;i<-1+sizeof boffo;i++){
         if (isspace((*p)[i]) || (*p)[i]=='\0') break;
@@ -250,7 +250,7 @@ rd(char**p){int i,t,u,v,z; /*read a list [^stackoverflow]*/
     }
     boffo[i]='\0';
     (*p)+=i;
-    R atom(boffo);
+    return atom(boffo);
 }
 
 void fix(x){signal(SIGSEGV,fix);sbrk(sizeof(int)*(msz*=2));} /*grow memory in response to memory-access fault*/
@@ -280,7 +280,7 @@ int main(){
             );
 
     while(1) {
-        printf("env:\n"); prnlst(env); printf("\n");
+        //printf("env:\n"); prnlst(env); printf("\n");
         printf(">");
         fflush(0);
         if (!fgets(s,sizeof s,stdin))
@@ -307,5 +307,5 @@ int main(){
         prnlst(x); printf("\n");
     }
 
-    R 0;
+    return 0;
 }
