@@ -1,4 +1,4 @@
-/* sexp.c - an "implicit int" tiny lisp.
+/* sexp.c - an integer-coded tiny lisp.
 cf.
 http://www.ioccc.org/1989/jar.2.c                  <-- memory 'cursors'
 http://leon.bottou.org/projects/minilisp           <-- compact 'C'-able cell encoding
@@ -9,6 +9,7 @@ http://www.cse.sc.edu/~mgv/csce330f13/micromanualLISP.pdf    <-- original micro-
 http://codegolf.stackexchange.com/questions/284/write-an-interpreter-for-the-untyped-lambda-calculus/3290#3290
 http://stackoverflow.com/questions/18096456/why-wont-my-little-lisp-quote  <-- earlier version of this program
 http://www.nhplace.com/kent/Papers/Special-Forms.html   <-- FEXPRs NLAMBDAs and MACROs, oh my!
+https://web.archive.org/web/20070317222311/http://www.modeemi.fi/~chery/lisp500/lisp500.c <-- similar idea
  */
 #include<assert.h>
 #include<math.h>
@@ -59,7 +60,7 @@ defun(  consp,(x),x&&listp(x))
                                         with the first code biased at `enc('T')` (ie. 20)
         10 : object : val is "pointer" to an object union
         11 : number : val is a 30bit fixnum
-   [^minilisp]
+   [^minilisp ^lisp500]
 
    6bit code
 
@@ -80,7 +81,7 @@ defun(  consp,(x),x&&listp(x))
 char *encoding = " ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz)123456789";
 defun(enc,(x),strchr(encoding,x)-encoding)
 defun(encstr0,(char*s),*s?encstr0(s+1)<<6|enc(*s):enc(' '))
-defun(encstr,(char*s),*s?encstr0(s+1)<<6|((enc(*s)+64-enc('T'))%64):enc(' '))
+defun(encstr,(char*s),*s?encstr0(s+1)<<6|((enc(*s)+64-enc(*ALPHA))%64):enc(' '))
 defun(atom,(char*s),encstr(s)<<TAGBITS|TAGATOM)
 defun(number,(x),x<<TAGBITS|TAGNUM)
 
@@ -193,21 +194,11 @@ int set(x,y){
     return y;
 }
 
-prnatom(unsigned x){
-    int i;
-    unsigned int a;
-    x>>=2;
-    a=x&0x3f;
-    a=(a + 20) % 64;  /* undo the bias at 'T' */
-    for(i=0;i<6;i++) {
-        //printf("%u:%c ", a, encoding[a]);
-        if (encoding[a]==' ') break;
-        printf("%c",encoding[a]);
-        x>>=6;
-        a=x&0x3f;
-    }
-    printf(" ");
-}
+defun(prnenc,(x),x&&printf("%c",encoding[x]))
+defun(prnatom,(unsigned x),prnatom0(x>>2),printf(" "))
+defun(prnatom0,(x),prnenc(((x&63)+enc('T'))%64),prnatomn(x>>6))
+defun(prnatomn,(x),x&63&&(prnenc(x&63),prnatomn(x>>6)))
+
 prn(x){atomp(x)?prnatom(x): /*print with dot-notation [^stackoverflow]*/
     numberp(x)?printf("%d ",val(x)):
     objectp(x)?printf("OBJ_%d ",val(x)):
@@ -253,7 +244,7 @@ rd(char**p){int i,t,u,v,z; /*read a list [^stackoverflow]*/
     return atom(boffo);
 }
 
-void fix(x){signal(SIGSEGV,fix);sbrk(sizeof(int)*(msz*=2));} /*grow memory in response to memory-access fault*/
+//void fix(x){signal(SIGSEGV,fix);sbrk(sizeof(int)*(msz*=2));} /*grow memory in response to memory-access fault*/
 int main(){
     //char *s;
     char s[BUFSIZ];
@@ -261,10 +252,11 @@ int main(){
     int x;
 
     assert((-1>>1)==-1);	/*require 2's-complement and right-shift must be sign-preserving */
-    printf("");  /* exercise stdio so it (hopefully) malloc's what it needs before we take sbrk() */
-    snprintf(NULL, 0, "%c%d%f", 'x', 42, 72.27);
-    n=m=sbrk(sizeof(int)*(msz=getpagesize()));*n++=0;*n++=0; /*initialize memory and begin at cell 2*/
+    //printf("");  /* exercise stdio so it (hopefully) malloc's what it needs before we take sbrk() */
+    //snprintf(NULL, 0, "%c%d%f", 'x', 42, 72.27);
+    //n=m=sbrk(sizeof(int)*(msz=getpagesize()));*n++=0;*n++=0; /*initialize memory and begin at cell 2*/
     //signal(SIGSEGV,fix); /*might let it run longer, obscures problems*/
+    n=m=calloc(msz=getpagesize(),sizeof(int));
 
     env = list(
             list(atom("T"),atom("T")),
