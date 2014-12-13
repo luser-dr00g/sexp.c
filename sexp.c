@@ -199,22 +199,19 @@ defun(prnatom,(unsigned x),prnatom0(x>>2),printf(" "))
 defun(prnatom0,(x),prnenc(((x&63)+enc('T'))%64),prnatomn(x>>6))
 defun(prnatomn,(x),x&63&&(prnenc(x&63),prnatomn(x>>6)))
 
-prn(x){atomp(x)?prnatom(x): /*print with dot-notation [^stackoverflow]*/
+defun(prn,(x),atomp(x)?prnatom(x): /*print with dot-notation [^stackoverflow]*/
     numberp(x)?printf("%d ",val(x)):
     objectp(x)?printf("OBJ_%d ",val(x)):
     consp(x)?printf("( "),prn(car(x)),printf(". "),prn(cdr(x)),printf(") "):
-    printf("NIL ");}
-
-prnlst(x){x==NIL?printf("NIL"):!consp(x)?prn(x):printf("( "),prnrem(x);} /*print with list-notation [^stackoverflow]*/
-prnrem(x){if(x==NIL)return;// printf(")0 ");
-    if(car(x)!=NIL)prn(car(x));
-    else return;
-    null(cdr(x))?printf(") "):
-    !listp(cdr(x))?prn(cdr(x)),printf(") "):
-    prnlst(car(cdr(x))),prnrem(cdr(cdr(x)))/*,printf(") ")*/;}
+    printf("NIL "))
 
 #define LPAR "("
 #define RPAR ")"
+defun(prnlstn,(x),!listp(x)?prn(x):
+        ((car(x)?prnlst(car(x)):0),(cdr(x)?prnlstn(cdr(x)):0)))
+defun(prnlst,(x),!listp(x)?prn(x):
+        (printf(LPAR),(car(x)?prnlst(car(x)):0),(cdr(x)?prnlstn(cdr(x)):0),printf(RPAR)))
+
 rd(char**p){int i,t,u,v,z; /*read a list [^stackoverflow]*/
     char boffo[6] = "";
     if(!(**p))return 0;
