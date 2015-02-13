@@ -38,7 +38,7 @@ int env;
    and a sizeof(int)*8-2 bit signed number. 32bit int :: 30bit + 2bit tag [^minilisp]*/
 enum { TAGCONS, TAGATOM, TAGOBJ, TAGNUM,
        TAGBITS = 2,
-       TAGMASK = 03 };
+       TAGMASK = (1U<<TAGBITS)-1 };
 defun(val,(x),x>>TAGBITS)
 defun(tag,(x),x&TAGMASK)
 defun(  listp,(x),tag(x)==TAGCONS) /* predicates */
@@ -91,7 +91,9 @@ union object { int tag;
       struct { int tag; int (*f)(); } f;
 };
 int objfunc(enum objecttag t, int(*f)()){
-    union object *o = (union object *)n; n+=(int)ceil((double)sizeof*o/sizeof*n);
+    union object *o = (union object *)n;
+    //n+=(int)ceil((double)sizeof*o/sizeof*n);
+    n+=(sizeof*o+sizeof*n-1)/sizeof*n;
     o->f.tag = t;
     o->f.f = f;
     return object((int*)o-m);
@@ -103,7 +105,7 @@ defun(fsubr2,(int(*f)()),objfunc(FSUBR2,f))
 
 /*manipulating lists.
   val() of course returns an int i which indexes `int *m;`
-                          our "pointer"           the memory
+                             ^^^^^:our "pointer"  ^^^^^^:the memory
   using the commutativity of indexing in C: m[i] == *(m + i) == i[m] */
 defun(cons,(x,y),*n++=x,*n++=y,(n-m)-2<<TAGBITS|TAGCONS)
 defun(rplaca,(x,y),consp(x)?val(x)[m]=y:0)
@@ -119,7 +121,7 @@ defun(cdddr,(x),cdr(cdr(cdr(x))))
 defun(caddar,(x),car(cdr(cdr(car(x)))))
 defun(cadddr,(x),car(cdr(cdr(cdr(x)))))
 
-/*build lists
+/*build lists [^ppnarg found in:comp.lang.c ^variadic functions:k&r2]
   list() variadic macro uses ppnarg.h to count the arguments and call listn
 https://github.com/luser-dr00g/sexp.c/blob/master/ppnarg.h
   listn() variadic function copies n (int) arguments to memory and call lista
@@ -131,6 +133,7 @@ int listn(int c,...){va_list a;int*z=n;
     c=n-z;return lista(c,z);}
 #define list(...) listn(PP_NARG(__VA_ARGS__),__VA_ARGS__)
 
+/*auxiliary functions [^jmc]*/
 defun(eq,(x,y),x==y)
 defun(ff,(x),atomp(x)?x:ff(car(x))) /* find first atom */
 defun(subst,(x,y,z),atomp(z)?(eq(z,y)?x:z): cons(subst(x,y,car(z)),subst(x,y,cdr(z))))

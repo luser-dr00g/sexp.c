@@ -15,4 +15,5 @@ https://groups.google.com/d/topic/comp.lang.c/FiC6hbH1azw/discussion
 "As a language, it's probably worse than any Lisp that has ever 
 existed, including the early work by John McCarthy's group." --Kaz Kylheku
 
-
+What's a hackish way to do a ceiling divide on integers? 2015/02/12 (Kaz saves the day, again)
+https://groups.google.com/d/topic/comp.lang.c/fXEAmat6-Pk/discussion
