@@ -17,3 +17,35 @@ existed, including the early work by John McCarthy's group." --Kaz Kylheku
 
 What's a hackish way to do a ceiling divide on integers? 2015/02/12 (Kaz saves the day, again)
 https://groups.google.com/d/topic/comp.lang.c/fXEAmat6-Pk/discussion
+
+For the example statements from the Micro Manual for Lisp
+(amended to restrict atoms to a maximum of 5 characters),
+
+    josh@Z1 ~/sexp.c
+    $ cat test
+    (QUOTE A)
+    (CAR (QUOTE (A B C)))
+    (CDR (QUOTE (A B C)))
+    (CONS (QUOTE A) (QUOTE (B C)))
+    (EQ (CAR (QUOTE (A B))) (QUOTE A))
+    (ATOM (QUOTE A))
+    (COND ((ATOM (QUOTE A))(QUOTE B))((QUOTE T)(QUOTE C)))
+    ((LAMBD (X Y) (CONS (CAR X) Y)) (QUOTE (A B)) (CDR (QUOTE (C D))))
+    ((LABEL FF (LAMBD (X)(COND ((ATOM X) X) ((QUOTE T)(FF (CAR X))))))(QUOTE ((A B) C)))
+
+`sexp` yields the follow (correct) output.
+
+    josh@Z1 ~/sexp.c
+    $ ./sexp <test
+    >A 
+    >A 
+    >(B C )
+    >(A B C )
+    >T 
+    >T 
+    >B 
+    >(A D )
+    >A 
+    >
+
+
