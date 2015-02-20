@@ -12,7 +12,6 @@ http://www.nhplace.com/kent/Papers/Special-Forms.html   <-- FEXPRs NLAMBDAs and 
 https://web.archive.org/web/20070317222311/http://www.modeemi.fi/~chery/lisp500/lisp500.c <-- similar idea
  */
 #include<assert.h>
-#include<math.h>
 #include<signal.h>
 #include<stdarg.h>
 #include<stdio.h>
