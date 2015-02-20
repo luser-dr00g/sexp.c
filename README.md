@@ -48,4 +48,15 @@ For the example statements from the Micro Manual for Lisp
     >A 
     >
 
+Off and on, I've considered what to do next with this project.
 
+One idea is to delve further into the Lisp 1.5 manual and implement the remaining functions, hopefully approaching a usable language (at least for vintage programs).
+
+But the idea I have a real desire to do is to add a compiler targetting this crazy interpreter based on unrelated research into the roots of FORTH and machine code.
+https://groups.google.com/d/topic/comp.lang.c/WGSl7ERMu1U/discussion
+
+AFAIUI I only need to write the code-generation part. The existing implementation can serve as a frpnt-end to the compiler for bootstrapping.
+
+Some related projects from which I'm drawing inspiration are
+[Zozotez](https://code.google.com/p/zozotez) 
+and [Scheme from Scratch](http://michaux.ca/articles/scheme-from-scratch-bootstrap-v0_1-integers).
