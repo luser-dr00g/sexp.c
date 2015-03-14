@@ -60,3 +60,6 @@ AFAIUI I only need to write the code-generation part. The existing implementatio
 Some related projects from which I'm drawing inspiration are
 [Zozotez](https://code.google.com/p/zozotez) 
 and [Scheme from Scratch](http://michaux.ca/articles/scheme-from-scratch-bootstrap-v0_1-integers).
+
+I'm 3 chapters into the 1979 book *Anatomy of Lisp*. So the compiler part should happen in the near(er) future. I'm considering adding alternate implementations for various pieces like the definition of symbols (preserve case, fold to upper, fold to lower), and the behavior of environments (association lists, Weizenbaum environments, other).
+
