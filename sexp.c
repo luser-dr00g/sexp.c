@@ -250,7 +250,11 @@ int main(){
     char *p;
     int x;
 
-    assert((-1>>1)==-1);	/*require 2's-complement and right-shift must be sign-preserving */
+    /* improved assertions thanks to Tim Rentsch, cf.
+       https://groups.google.com/d/msg/comp.lang.c/FZldZaPpTT4/5g4bWdsxAwAJ */
+    assert((-1 & 3) == 3); /* that ints are 2's complement */
+    assert((-1 >> 1) < 0); /* that right shift keeps sign */
+    //assert((-1>>1)==-1);	/*require 2's-complement and right-shift must be sign-preserving */
     //printf("");  /* exercise stdio so it (hopefully) malloc's what it needs before we take sbrk() */
     //snprintf(NULL, 0, "%c%d%f", 'x', 42, 72.27);
     //n=m=sbrk(sizeof(int)*(msz=getpagesize()));*n++=0;*n++=0; /*initialize memory and begin at cell 2*/
