@@ -153,34 +153,32 @@ defun(apply,(f,args),eval(cons(f,appq(args)),NIL))
 defun(appq,(m),null(m)?NIL:cons(list(atom("QUOTE"),car(m)),appq(cdr(m))))
 defun(eval,(e,a),
     //prnlst(e), printf("\n"),
-    numberp(e)?e:
-    atomp(e)?assoc(e,a):
+    numberp(e)? e:
+    atomp(e)? assoc(e,a):
     atomp(car(e))?(
-                   eq(car(e),atom("QUOTE"))?cadr(e):
-                   eq(car(e),atom("ATOM"))? atomp(eval(cadr(e),a)):
-                   eq(car(e),atom("EQ"))?   eval(cadr(e),a)==eval(caddr(e),a):
-                   eq(car(e),atom("COND"))? evcon(cdr(e),a):
-                   eq(car(e),atom("CAR"))?  car(eval(cadr(e),a)):
-                   eq(car(e),atom("CDR"))?  cdr(eval(cadr(e),a)):
-                   eq(car(e),atom("CONS"))? cons(eval(cadr(e),a),eval(caddr(e),a)):
-                   eq(car(e),atom("DEFUN"))?
-                       (a=list(atom("LABEL"),cadr(e),list(atom("LAMBD"),caddr(e),cadddr(e))),
-                       env=append(env, list(list(cadr(e),a))), a):
+	eq(car(e),atom("QUOTE"))? cadr(e):
+	eq(car(e),atom("ATOM"))?  atomp(eval(cadr(e),a)):
+	eq(car(e),atom("EQ"))?    eval(cadr(e),a)==eval(caddr(e),a):
+	eq(car(e),atom("COND"))?  evcon(cdr(e),a):
+	eq(car(e),atom("CAR"))?   car(eval(cadr(e),a)):
+	eq(car(e),atom("CDR"))?   cdr(eval(cadr(e),a)):
+	eq(car(e),atom("CONS"))?  cons(eval(cadr(e),a),eval(caddr(e),a)):
+	eq(car(e),atom("DEFUN"))? (a=list(atom("LABEL"),cadr(e),list(atom("LAMBD"),caddr(e),cadddr(e))),
+	    			   env=append(env, list(list(cadr(e),a))), a):
         eval(cons(assoc(car(e),a),cdr(e)),a)):
         //eval(cons(assoc(car(e),a),evlis(cdr(e),a)),a) ): /*<jmc ^rootsoflisp*/
-    objectp(car(e))?evobj(e,a):
-    eq(caar(e),atom("LABEL"))? /*LABEL*/
-        eval(cons(caddar(e),cdr(e)),cons(list(cadar(e),car(e)),a)):
-    eq(caar(e),atom("LAMBD"))? /*LAMBDA with 5-char atoms */
-        eval(caddar(e),append(pair(cadar(e),evlis(cdr(e),a)),a)):
+    objectp(car(e))? 	       evobj(e,a):
+    eq(caar(e),atom("LABEL"))? eval(cons(caddar(e),cdr(e)),cons(list(cadar(e),car(e)),a)):
+    eq(caar(e),atom("LAMBD"))? eval(caddar(e),append(pair(cadar(e),evlis(cdr(e),a)),a)):
+                   /*LAMBDA with 5-char atoms */
     0)
 defun(evcon,(c,a),eval(caar(c),a)?eval(cadar(c),a):evcon(cdr(c),a))
 defun(evlis,(m,a),null(m)?NIL:cons(eval(car(m),a),evlis(cdr(m),a)))
 
-defun(evobjo,(o,e,a)union object o;, o.tag== SUBR ?o.f.f(eval(cadr(e),a)):
-                                     o.tag==FSUBR ?o.f.f(cdr(e)):
-			             o.tag== SUBR2?o.f.f(eval(cadr(e),a), eval(caddr(e),a)):
-                                     o.tag==FSUBR2?o.f.f(cadr(e),caddr(e)): 0)
+defun(evobjo,(o,e,a)union object o;, o.tag== SUBR ? o.f.f(eval(cadr(e),a)):
+                                     o.tag==FSUBR ? o.f.f(cdr(e)):
+			             o.tag== SUBR2? o.f.f(eval(cadr(e),a), eval(caddr(e),a)):
+                                     o.tag==FSUBR2? o.f.f(cadr(e),caddr(e)): 0)
 defun(evobj,(e,a),evobjo(*(union object*)(m+val(car(e))),e,a))
 
 defun(maplist,(x,f),null(x)?NIL:cons(apply(f,x),maplist(cdr(x),f)))
@@ -209,7 +207,7 @@ defun(prnlst,(x),!listp(x)?prn(x):
 
 #define BUFSZ 6
 rdlist(p,z,u)char**p;{
-  ++(p);
+  ++(*p);
   z=NIL;
   u=rd(p);
   if (u!=atom(RPAR)){
@@ -222,7 +220,7 @@ rdnum(p,v)char**p;{
   while(*++*p>='0'&&**p<='9') v*=10, v+=**p-'0';
   return number(v);
 }
-rdatom(p,buf,i)char**p,*buf;{
+rdatom(char**p,char*buf,int i){
     for(i=0;i<-1+BUFSZ;i++){
         if (isspace((*p)[i]) || (*p)[i]=='\0') break;
         if (!strchr(encoding,(*p)[i])) break;
@@ -233,16 +231,17 @@ rdatom(p,buf,i)char**p,*buf;{
     (*p)+=i;
     return atom(buf);
 }
-rdbuf(p,buf,v)char**p,*buf;{
-  return **p?**p==' '          ?(++(*p),rd(p))     :
-             **p==*RPAR        ?(++(*p),atom(RPAR)):
-	     **p==*LPAR        ?rdlist(p,0,0)      :
-             **p>='0'&&**p<='9'?rdnum(p,**p-'0')   :
-                                rdatom(p,0)        :0;
+rdbuf(char**p,char*buf,char c){
+  return c?(c==' '        ?(++(*p),rd(p))     :
+            c==*RPAR      ?(++(*p),atom(RPAR)):
+	    c==*LPAR      ?rdlist(p,0,0)      :
+            c>='0'&&c<='9'?rdnum(p,c-'0')     : rdatom(p,buf,0)):0;
 }
+
 rd(char**p){
-  return rdbuf(p,(char[BUFSZ]){""},0);
+  return rdbuf(p,(char[BUFSZ]){""},**p);
 }
+
 
 v1_rd(char**p){int i,t,u,v,z; /*read a list [^stackoverflow]*/
     char boffo[6] = "";
@@ -292,16 +291,16 @@ int main(){
     n=m=calloc(msz=getpagesize(),sizeof(int));
 
     env = list(
-            list(atom("T"),atom("T")),
-            list(atom("NIL"),NIL),
-            list(atom("CAAR"),subr1(caar)),
-            list(atom("CADR"),subr1(cadr)),
-            list(atom("CDDR"),subr1(cddr)),
-            list(atom("CADAR"),subr1(cadar)),
-            list(atom("CADDR"),subr1(caddr)),
-            list(atom("CDDDR"),subr1(cdddr)),
-            list(atom("SET"),subr2(set)),
-            list(atom("SETQ"),fsubr2(set))
+            list(atom("T"),     atom("T")   ),
+            list(atom("NIL"),        NIL    ),
+            list(atom("CAAR"),  subr1(caar) ),
+            list(atom("CADR"),  subr1(cadr) ),
+            list(atom("CDDR"),  subr1(cddr) ),
+            list(atom("CADAR"), subr1(cadar)),
+            list(atom("CADDR"), subr1(caddr)),
+            list(atom("CDDDR"), subr1(cdddr)),
+            list(atom("SET"),   subr2(set)  ),
+            list(atom("SETQ"), fsubr2(set)  )
             );
 
     while(1) {
