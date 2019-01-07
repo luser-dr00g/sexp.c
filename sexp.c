@@ -23,19 +23,16 @@ https://web.archive.org/web/20070317222311/http://www.modeemi.fi/~chery/lisp500/
 #include<string.h>
 #include<unistd.h>
 #include"ppnarg.h"   /*https://github.com/luser-dr00g/sexp.c/blob/master/ppnarg.h*/
+
 /*defun macro thanks to Kaz Kylheku: https://groups.google.com/d/msg/comp.lang.c/FiC6hbH1azw/-Tiuw2oQoyAJ*/
-#define defun(NAME,ARGS,...) \
-    int NAME ARGS { return __VA_ARGS__; }
+#define defun(NAME,ARGS,...) int NAME ARGS { return __VA_ARGS__; }
+#define ALPHA "T"
+#define NIL   (0)
+#define T atom(ALPHA)
+#define LPAR  "("
+#define RPAR  ")"
+#define BUFSZ  6
 
-
-/* memory is organized as a large array of ints
-   each int is a "word" and memory can be accessed by
-       m[int]
-   the int here is a cursor called herein a "pointer" (<-- always in quotes) [^codegolf jar2]*/
-int*m,*n,msz; /*memory next mem-size*/
-
-/* global environment for REPL, modified by SET, SETQ and DEFUN */
-int env;
 
 /* each word is interpreted as a 2 bit tag
    and a sizeof(int)*8-2 bit signed number. 32bit int :: 30bit + 2bit tag [^minilisp]*/
@@ -49,6 +46,16 @@ defun(  atomp,(x),tag(x)==TAGATOM)
 defun(objectp,(x),tag(x)==TAGOBJ)
 defun(numberp,(x),tag(x)==TAGNUM)
 defun(  consp,(x),x&&listp(x))
+
+
+/* memory is organized as a large array of ints
+   each int is a "word" and memory can be accessed by
+       m[int]
+   the int here is a cursor called herein a "pointer" (<-- always in quotes) [^codegolf jar2]*/
+int*m,*n,msz; /*memory next mem-size*/
+
+/* global environment for REPL, modified by SET, SETQ and DEFUN */
+int env;
 
 /* bias the alphabet at the ascii code for T,  [<my own brilliant idea]
    this way, the word 1 means 30bit 0 + 2bit 01 :: the symbol T
@@ -64,43 +71,53 @@ defun(  consp,(x),x&&listp(x))
         10 : object : val is "pointer" to an object union
         11 : number : val is a 30bit fixnum
    [^minilisp ^lisp500]
-
-   6bit code
-
-   0          111111 11112222 22222233 33333333 44444444 44555555 5555 6666
-   01234567 89012345 67890123 45678901 23456789 01234567 89012345 6789 0123  <- general position
-
-  " ABCDEFG HIJKLMNO PQRSTUVW XYZ_abcd efghijkl mnopqrst uvwxyz)1 2345 6789"
-
-   -------- -------- ----
-   21111111 111          0          11 11111111 22222222 22333333 3333 4444
-   09876543 21098765 43210123 45678901 23456789 01234567 89012345 6789 0123  <- first char
-   44444455 55555555 6666
-   45678901 23456789 0123
 */
-#define ALPHA "T"
-#define NIL   (0)
-#define T atom(ALPHA)
+
+//defun(atom,(char*s),0)
+//defun(prnatom,(unsigned x),0)
+//defun(rdatom,(char**p,char*buf,int i),atom(buf))
+
+defun(number, (x),     x<<TAGBITS|TAGNUM)
+defun(object, (x),     x<<TAGBITS|TAGOBJ)
+enum objecttag {SUBR, FSUBR, SUBR2, FSUBR2, STRING};
+union object {int tag;
+      struct {int tag; int(*f)();} f;
+      struct {int tag; char*s;   } s;
+                                     };
+defun(objptr, (union object*p,union object o),*p=o,object((int*)p-m))
+union object*newobjptr(){void *p=n;return n+=(sizeof(union object)+sizeof*n-1)/sizeof*n,p;}
+defun(objfunc,(enum objecttag t,int(*f)()),objptr(newobjptr(),(union object){.f={.tag=t,.f=f}}) )
+defun( subr1,(int(*f)()),objfunc( SUBR, f))
+defun(fsubr1,(int(*f)()),objfunc(FSUBR, f))
+defun( subr2,(int(*f)()),objfunc( SUBR2,f))
+defun(fsubr2,(int(*f)()),objfunc(FSUBR2,f))
+
+union object*newstrptr(char*s){void *p=n;return n+=(strlen(s)+sizeof*n-1)/sizeof*n,p;}
+defun(objstr,(char*s),objptr(newobjptr(),(union object){.s={.tag=STRING,.s=s}}))
+defun(string,(char*s),object(objstr(strcpy((char*)n,s))))
+
 char *encoding = " ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz)123456789";
 defun(enc,    (x),     strchr(encoding,x)-encoding)
 defun(encstr0,(char*s),*s?encstr0(s+1)<<6|  enc(*s)                    :enc(' '))
 defun(encstr, (char*s),*s?encstr0(s+1)<<6|((enc(*s)+64-enc(*ALPHA))%64):enc(' '))
 defun(atom,   (char*s),encstr(s)<<TAGBITS|TAGATOM)
-defun(number, (x),     x<<TAGBITS|TAGNUM)
-defun(object, (x),     x<<TAGBITS|TAGOBJ)
-enum objecttag {SUBR, FSUBR, SUBR2, FSUBR2};
-union object {int tag;
-      struct {int tag; int(*f)();} f;
-};
-defun(objptr, (union object*p,union object o),*p=o,object((int*)p-m))
-defun(objfunc,(enum objecttag t, int(*f)()),
-              objptr((void*)(n+=(sizeof(union object)+sizeof*n-1)/sizeof*n,n),
-	             (union object){.f={.tag=t,.f=f}}) )
 
-defun( subr1,(int(*f)()),objfunc( SUBR, f))
-defun(fsubr1,(int(*f)()),objfunc(FSUBR, f))
-defun( subr2,(int(*f)()),objfunc( SUBR2,f))
-defun(fsubr2,(int(*f)()),objfunc(FSUBR2,f))
+defun(prnenc,(x),x&&printf("%c",encoding[x]))
+defun(prnatom0,(x),prnenc(((x&63)+enc('T'))%64),prnatomn(x>>6))
+defun(prnatomn,(x),x&63&&(prnenc(x&63),prnatomn(x>>6)))
+defun(prnatom,(unsigned x),prnatom0(x>>2),printf(" "))
+
+rdatom(char**p,char*buf,int i){
+    for(i=0;i<-1+BUFSZ;i++){
+        if (isspace((*p)[i]) || (*p)[i]=='\0') break;
+        if (!strchr(encoding,(*p)[i])) break;
+        if (strchr("()",(*p)[i])) break;
+        buf[i]=(*p)[i];
+    }
+    buf[i]='\0';
+    (*p)+=i;
+    return atom(buf);
+}
 
 /*manipulating lists.
   val() of course returns an int i which indexes `int *m;`
@@ -187,99 +204,24 @@ defun(assocpair,(x,y),eq(caar(y),x)?car(y):null(y)?0:assocpair(x,cdr(y)))
 defun(seta,(a,x,y),(a?rplacd(a,list(y)):(env=append(list(list(x,y),env)))),y)
 defun(set,   (x,y),seta(assocpair(x,env),x,y))
 
-defun(prnenc,(x),x&&printf("%c",encoding[x]))
-defun(prnatom,(unsigned x),prnatom0(x>>2),printf(" "))
-defun(prnatom0,(x),prnenc(((x&63)+enc('T'))%64),prnatomn(x>>6))
-defun(prnatomn,(x),x&63&&(prnenc(x&63),prnatomn(x>>6)))
-
-defun(prn,(x),atomp(x)?prnatom(x): /*print with dot-notation [^stackoverflow]*/
-    numberp(x)?printf("%d ",val(x)):
-    objectp(x)?printf("OBJ_%d ",val(x)):
-    consp(x)?printf("( "),prn(car(x)),printf(". "),prn(cdr(x)),printf(") "):
-    printf("NIL "))
-
-#define LPAR "("
-#define RPAR ")"
+defun(prn,(x),atomp(x)  ?prnatom(x)               : /*print with dot-notation [^stackoverflow]*/
+	      numberp(x)?printf("%d ",val(x))     :
+	      objectp(x)?printf("OBJ_%d ",val(x)) :
+	      consp(x)  ?printf("( "),prn(car(x)),printf(". "),prn(cdr(x)),printf(") "):
+	                 printf("NIL "))
 defun(prnlstn,(x),!listp(x)?prn(x):
         ((car(x)?prnlst(car(x)):0),(cdr(x)?prnlstn(cdr(x)):0)))
 defun(prnlst,(x),!listp(x)?prn(x):
         (printf(LPAR),(car(x)?prnlst(car(x)):0),(cdr(x)?prnlstn(cdr(x)):0),printf(RPAR)))
 
-#define BUFSZ 6
 defun(rdlist,(p,z,u)char**p;,u==atom(RPAR)?z:append(cons(u,NIL),rdlist(p,z,rd(p))))
 defun(rdnum,(p,v)char**p;,*++*p>='0'&&**p<='9'?rdnum(p,v*10+**p-'0'):v)
-rdatom(char**p,char*buf,int i){
-    for(i=0;i<-1+BUFSZ;i++){
-        if (isspace((*p)[i]) || (*p)[i]=='\0') break;
-        if (!strchr(encoding,(*p)[i])) break;
-        if (strchr("()",(*p)[i])) break;
-        buf[i]=(*p)[i];
-    }
-    buf[i]='\0';
-    (*p)+=i;
-    return atom(buf);
-}
-rdbuf(char**p,char*buf,char c){
-  return c?(c==' '        ?(++(*p),rd(p))              :
-            c==*RPAR      ?(++(*p),atom(RPAR))         :
-	    c==*LPAR      ?(++(*p),rdlist(p,NIL,rd(p))):
-            c>='0'&&c<='9'?number(rdnum(p,c-'0'))      :
-			   rdatom(p,buf,0)):0;
-}
-
+defun(rdbuf,(char**p,char*buf,char c),(c?(c==' '        ?(++(*p),rd(p)                ):
+			                  c==*RPAR      ?(++(*p),atom(RPAR)           ):
+				          c==*LPAR      ?(++(*p),rdlist(p,NIL,rd(p))  ):
+			                  c>='0'&&c<='9'?        number(rdnum(p,c-'0')):
+						                 rdatom(p,buf,0)        ):0))
 defun(rd,(char**p),rdbuf(p,(char[BUFSZ]){""},**p))
-
-
-v1_rdlist(p,z,u)char**p;{
-  ++(*p);
-  z=NIL;
-  u=rd(p);
-  if (u!=atom(RPAR)){
-    z=cons(u,NIL);
-    while(u=rd(p),!eq(u,atom(RPAR)))u=cons(u,NIL),z=append(z,u);
-  }
-  return z;
-}
-v2_rdlist(p,z,u)char**p;{
-  if (u!=atom(RPAR)){
-    z=cons(u,NIL);
-    while(u=rd(p),!eq(u,atom(RPAR)))u=cons(u,NIL),z=append(z,u);
-  }
-  return z;
-}
-v1_rdnum(p,v)char**p;{
-  while(*++*p>='0'&&**p<='9') v*=10, v+=**p-'0';
-  return number(v);
-}
-
-v1_rd(char**p){int i,t,u,v,z; /*read a list [^stackoverflow]*/
-    char boffo[6] = "";
-    if(!(**p))return 0;
-    if(**p==' ')return++(*p),rd(p);
-    if(**p==*RPAR)return++(*p),atom(RPAR);
-    if(**p==*LPAR){++(*p);
-        z=NIL;
-        u=rd(p);
-        if (u!=atom(RPAR)){
-            z=cons(u,NIL);
-            while(u=rd(p),!eq(u,atom(RPAR)))u=cons(u,NIL),z=append(z,u);
-        }
-        return z;}
-    if(**p>='0'&&**p<='9'){
-        int v = **p - '0';
-        while(*++*p>='0'&&**p<='9') v*=10, v+=**p-'0';
-        return number(v);
-    }
-    for(i=0;i<-1+sizeof boffo;i++){
-        if (isspace((*p)[i]) || (*p)[i]=='\0') break;
-        if (!strchr(encoding,(*p)[i])) break;
-        if (strchr("()",(*p)[i])) break;
-        boffo[i]=(*p)[i];
-    }
-    boffo[i]='\0';
-    (*p)+=i;
-    return atom(boffo);
-}
 
 //void fix(x){signal(SIGSEGV,fix);sbrk(sizeof(int)*(msz*=2));} /*grow memory in response to memory-access fault*/
 int main(){
