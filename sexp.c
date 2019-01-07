@@ -206,20 +206,8 @@ defun(prnlst,(x),!listp(x)?prn(x):
         (printf(LPAR),(car(x)?prnlst(car(x)):0),(cdr(x)?prnlstn(cdr(x)):0),printf(RPAR)))
 
 #define BUFSZ 6
-rdlist(p,z,u)char**p;{
-  ++(*p);
-  z=NIL;
-  u=rd(p);
-  if (u!=atom(RPAR)){
-    z=cons(u,NIL);
-    while(u=rd(p),!eq(u,atom(RPAR)))u=cons(u,NIL),z=append(z,u);
-  }
-  return z;
-}
-rdnum(p,v)char**p;{
-  while(*++*p>='0'&&**p<='9') v*=10, v+=**p-'0';
-  return number(v);
-}
+defun(rdlist,(p,z,u)char**p;,u==atom(RPAR)?z:append(cons(u,NIL),rdlist(p,z,rd(p))))
+defun(rdnum,(p,v)char**p;,*++*p>='0'&&**p<='9'?rdnum(p,v*10+**p-'0'):v)
 rdatom(char**p,char*buf,int i){
     for(i=0;i<-1+BUFSZ;i++){
         if (isspace((*p)[i]) || (*p)[i]=='\0') break;
@@ -232,16 +220,37 @@ rdatom(char**p,char*buf,int i){
     return atom(buf);
 }
 rdbuf(char**p,char*buf,char c){
-  return c?(c==' '        ?(++(*p),rd(p))     :
-            c==*RPAR      ?(++(*p),atom(RPAR)):
-	    c==*LPAR      ?rdlist(p,0,0)      :
-            c>='0'&&c<='9'?rdnum(p,c-'0')     : rdatom(p,buf,0)):0;
+  return c?(c==' '        ?(++(*p),rd(p))              :
+            c==*RPAR      ?(++(*p),atom(RPAR))         :
+	    c==*LPAR      ?(++(*p),rdlist(p,NIL,rd(p))):
+            c>='0'&&c<='9'?number(rdnum(p,c-'0'))      :
+			   rdatom(p,buf,0)):0;
 }
 
-rd(char**p){
-  return rdbuf(p,(char[BUFSZ]){""},**p);
-}
+defun(rd,(char**p),rdbuf(p,(char[BUFSZ]){""},**p))
 
+
+v1_rdlist(p,z,u)char**p;{
+  ++(*p);
+  z=NIL;
+  u=rd(p);
+  if (u!=atom(RPAR)){
+    z=cons(u,NIL);
+    while(u=rd(p),!eq(u,atom(RPAR)))u=cons(u,NIL),z=append(z,u);
+  }
+  return z;
+}
+v2_rdlist(p,z,u)char**p;{
+  if (u!=atom(RPAR)){
+    z=cons(u,NIL);
+    while(u=rd(p),!eq(u,atom(RPAR)))u=cons(u,NIL),z=append(z,u);
+  }
+  return z;
+}
+v1_rdnum(p,v)char**p;{
+  while(*++*p>='0'&&**p<='9') v*=10, v+=**p-'0';
+  return number(v);
+}
 
 v1_rd(char**p){int i,t,u,v,z; /*read a list [^stackoverflow]*/
     char boffo[6] = "";
