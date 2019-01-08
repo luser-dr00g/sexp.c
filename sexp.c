@@ -92,22 +92,28 @@ defun(fsubr1,(int(*f)()),objfunc(FSUBR, f))
 defun( subr2,(int(*f)()),objfunc( SUBR2,f))
 defun(fsubr2,(int(*f)()),objfunc(FSUBR2,f))
 
-union object*newstrptr(char*s){void *p=n;return n+=(strlen(s)+sizeof*n-1)/sizeof*n,p;}
+char*newstrptr(char*s){void *p=n;return n+=(strlen(s)+sizeof*n-1)/sizeof*n,p;}
 defun(objstr,(char*s),objptr(newobjptr(),(union object){.s={.tag=STRING,.s=s}}))
-defun(string,(char*s),object(objstr(strcpy((char*)n,s))))
+defun(string,(char*s),object(objstr(newstrptr(strcpy((char*)n,s)))))
+
+defun(prnatom,(unsigned x),prnatom0(x>>2),printf(" "))
+defun(atom,   (char*s),encstr(s)<<TAGBITS|TAGATOM)
+
 
 char *encoding = " ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz)123456789";
 defun(enc,    (x),     strchr(encoding,x)-encoding)
 defun(encstr0,(char*s),*s?encstr0(s+1)<<6|  enc(*s)                    :enc(' '))
 defun(encstr, (char*s),*s?encstr0(s+1)<<6|((enc(*s)+64-enc(*ALPHA))%64):enc(' '))
-defun(atom,   (char*s),encstr(s)<<TAGBITS|TAGATOM)
 
 defun(prnenc,(x),x&&printf("%c",encoding[x]))
-defun(prnatom0,(x),prnenc(((x&63)+enc('T'))%64),prnatomn(x>>6))
 defun(prnatomn,(x),x&63&&(prnenc(x&63),prnatomn(x>>6)))
-defun(prnatom,(unsigned x),prnatom0(x>>2),printf(" "))
+defun(prnatom0,(x),prnenc(((x&63)+enc('T'))%64),prnatomn(x>>6))
 
-rdatom(char**p,char*buf,int i){
+char *rdatom(char**p,char*buf,int i){
+  return memcpy(buf,*p,i=strcspn(*p,"() \t")), (*p)+=i, buf;
+}
+
+char *v1_rdatom(char**p,char*buf,int i){
     for(i=0;i<-1+BUFSZ;i++){
         if (isspace((*p)[i]) || (*p)[i]=='\0') break;
         if (!strchr(encoding,(*p)[i])) break;
@@ -116,8 +122,9 @@ rdatom(char**p,char*buf,int i){
     }
     buf[i]='\0';
     (*p)+=i;
-    return atom(buf);
+    return buf;
 }
+
 
 /*manipulating lists.
   val() of course returns an int i which indexes `int *m;`
@@ -220,7 +227,7 @@ defun(rdbuf,(char**p,char*buf,char c),(c?(c==' '        ?(++(*p),rd(p)          
 			                  c==*RPAR      ?(++(*p),atom(RPAR)           ):
 				          c==*LPAR      ?(++(*p),rdlist(p,NIL,rd(p))  ):
 			                  c>='0'&&c<='9'?        number(rdnum(p,c-'0')):
-						                 rdatom(p,buf,0)        ):0))
+					                         atom(rdatom(p,buf,0))  ):0))
 defun(rd,(char**p),rdbuf(p,(char[BUFSZ]){""},**p))
 
 //void fix(x){signal(SIGSEGV,fix);sbrk(sizeof(int)*(msz*=2));} /*grow memory in response to memory-access fault*/
