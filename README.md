@@ -32,7 +32,7 @@ For the example statements from the Micro Manual for Lisp.
     ((LAMBDA (X Y) (CONS (CAR X) Y)) (QUOTE (A B)) (CDR (QUOTE (C D))))
     ((LABEL FF (LAMBDA (X)(COND ((ATOM X) X) ((QUOTE T)(FF (CAR X))))))(QUOTE ((A B) C)))
 
-`sexp` yields the follow (correct) output.
+`sexp` yields the following (correct) output.
 
     josh@Z1 ~/sexp.c
     $ ./sexp <test
