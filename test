@@ -5,5 +5,5 @@
 (EQ (CAR (QUOTE (A B))) (QUOTE A))
 (ATOM (QUOTE A))
 (COND ((ATOM (QUOTE A))(QUOTE B))((QUOTE T)(QUOTE C)))
-((LAMBD (X Y) (CONS (CAR X) Y)) (QUOTE (A B)) (CDR (QUOTE (C D))))
-((LABEL FF (LAMBD (X)(COND ((ATOM X) X) ((QUOTE T)(FF (CAR X))))))(QUOTE ((A B) C)))
+((LAMBDA (X Y) (CONS (CAR X) Y)) (QUOTE (A B)) (CDR (QUOTE (C D))))
+((LABEL FF (LAMBDA (X)(COND ((ATOM X) X) ((QUOTE T)(FF (CAR X))))))(QUOTE ((A B) C)))

@@ -31,7 +31,7 @@ https://web.archive.org/web/20070317222311/http://www.modeemi.fi/~chery/lisp500/
 #define T atom(ALPHA)
 #define LPAR  "("
 #define RPAR  ")"
-#define BUFSZ  6
+#define ATOMBUFSZ  10
 
 
 /* each word is interpreted as a 2 bit tag
@@ -54,14 +54,27 @@ defun(  consp,(x),x&&listp(x))
    the int here is a cursor called herein a "pointer" (<-- always in quotes) [^codegolf jar2]*/
 int*m,*n,msz; /*memory next mem-size*/
 
+/*build lists [^ppnarg found in:comp.lang.c ^variadic functions:k&r2]
+  list() variadic macro uses ppnarg.h to count the arguments and call listn
+https://github.com/luser-dr00g/sexp.c/blob/master/ppnarg.h
+  listn() variadic function copies n (int) arguments to memory and call lista
+  lista() constructs a list of n elements from pointer to memory
+ */
+int lista(int c,int*a){int z=NIL;for(;c;)z=cons(a[--c],z);return z;}
+int listn(int c,...){va_list a;int*z=n;
+    va_start(a,c);for(;c--;)*n++=va_arg(a,int);va_end(a);
+    c=n-z;return lista(c,z);}
+#define list(...) listn(PP_NARG(__VA_ARGS__),__VA_ARGS__)
+
+
 /* global environment for REPL, modified by SET, SETQ and DEFUN */
 int env;
 
 /* bias the alphabet at the ascii code for T,  [<my own brilliant idea]
    this way, the word 1 means 30bit 0 + 2bit 01 :: the symbol T
         and, the word 0  ::   30bit 0 + 2bit 00 :: the list NIL
-                 word 5  ::   30bit 1 + 2bit 01 :: the symbol U
-                 word 9  ::   30bit 2 + 2bit 01 :: the symbol V
+                 word 5  ::   30bit 1 + 2bit 01 :: the symbol NIL
+                 word 9  ::   30bit 2 + 2bit 01 :: the symbol SETQ
                  word 4  ::   30bit 1 + 2bit 00 :: the list at address 1
                  word 8  ::   30bit 2 + 2bit 00 :: the list at address 2
 
@@ -92,39 +105,24 @@ defun(fsubr1,(int(*f)()),objfunc(FSUBR, f))
 defun( subr2,(int(*f)()),objfunc( SUBR2,f))
 defun(fsubr2,(int(*f)()),objfunc(FSUBR2,f))
 
-char*newstrptr(char*s){void *p=n;return n+=(strlen(s)+sizeof*n-1)/sizeof*n,p;}
+char*newstrptr(char*s){return n+=(strlen(s)+1+sizeof*n-1)/sizeof*n,s;}
 defun(objstr,(char*s),objptr(newobjptr(),(union object){.s={.tag=STRING,.s=s}}))
-defun(string,(char*s),object(objstr(newstrptr(strcpy((char*)n,s)))))
+defun(string,(char*s),objstr(newstrptr(strcpy((char*)n,s))))
+union object *strobj(int x){return (void *) &m[x>>TAGBITS];}
+defun(prnstring,(x),printf("%s ", strobj(x)->s.s))
+defun(stringp,(x),tag(x)==TAGOBJ&&strobj(x)->tag==STRING)
 
-defun(prnatom,(unsigned x),prnatom0(x>>2),printf(" "))
+defun(prnatom,(unsigned x),prnatom0(x>>TAGBITS),printf(" "))
 defun(atom,   (char*s),encstr(s)<<TAGBITS|TAGATOM)
+char *rdatom(char**p,char*buf,int i){return memcpy(buf,*p,i), (*p)+=i, buf;}
 
+int atoms;
+defun(findstr, (char*s,int slist,int i), !strcmp(strobj(car(slist))->s.s,s)? i:
+            		    cdr(slist)? findstr(s,cdr(slist),i+1): (rplacd(slist,list(string(s))),i+1))
+defun(encstr, (char*s),findstr(s,atoms,0))
 
-char *encoding = " ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz)123456789";
-defun(enc,    (x),     strchr(encoding,x)-encoding)
-defun(encstr0,(char*s),*s?encstr0(s+1)<<6|  enc(*s)                    :enc(' '))
-defun(encstr, (char*s),*s?encstr0(s+1)<<6|((enc(*s)+64-enc(*ALPHA))%64):enc(' '))
-
-defun(prnenc,(x),x&&printf("%c",encoding[x]))
-defun(prnatomn,(x),x&63&&(prnenc(x&63),prnatomn(x>>6)))
-defun(prnatom0,(x),prnenc(((x&63)+enc('T'))%64),prnatomn(x>>6))
-
-char *rdatom(char**p,char*buf,int i){
-  return memcpy(buf,*p,i=strcspn(*p,"() \t")), (*p)+=i, buf;
-}
-
-char *v1_rdatom(char**p,char*buf,int i){
-    for(i=0;i<-1+BUFSZ;i++){
-        if (isspace((*p)[i]) || (*p)[i]=='\0') break;
-        if (!strchr(encoding,(*p)[i])) break;
-        if (strchr("()",(*p)[i])) break;
-        buf[i]=(*p)[i];
-    }
-    buf[i]='\0';
-    (*p)+=i;
-    return buf;
-}
-
+defun(prnatomx,(x,atoms),x?prnatomx(x-1,cdr(atoms)):printf("%s", strobj(car(atoms))->s.s))
+defun(prnatom0,(x),prnatomx(x,atoms))
 
 /*manipulating lists.
   val() of course returns an int i which indexes `int *m;`
@@ -143,18 +141,6 @@ defun(caddr, (x),      car(cdr(cdr(x))))
 defun(cdddr, (x),      cdr(cdr(cdr(x))))
 defun(caddar,(x),  car(cdr(cdr(car(x)))))
 defun(cadddr,(x),  car(cdr(cdr(cdr(x)))))
-
-/*build lists [^ppnarg found in:comp.lang.c ^variadic functions:k&r2]
-  list() variadic macro uses ppnarg.h to count the arguments and call listn
-https://github.com/luser-dr00g/sexp.c/blob/master/ppnarg.h
-  listn() variadic function copies n (int) arguments to memory and call lista
-  lista() constructs a list of n elements from pointer to memory
- */
-int lista(int c,int*a){int z=NIL;for(;c;)z=cons(a[--c],z);return z;}
-int listn(int c,...){va_list a;int*z=n;
-    va_start(a,c);for(;c--;)*n++=va_arg(a,int);va_end(a);
-    c=n-z;return lista(c,z);}
-#define list(...) listn(PP_NARG(__VA_ARGS__),__VA_ARGS__)
 
 /*auxiliary functions [^jmc]*/
 defun(eq,(x,y),x==y)
@@ -187,13 +173,13 @@ defun(eval,(e,a),
 	eq(car(e),atom("CAR"))?   car(eval(cadr(e),a)):
 	eq(car(e),atom("CDR"))?   cdr(eval(cadr(e),a)):
 	eq(car(e),atom("CONS"))?  cons(eval(cadr(e),a),eval(caddr(e),a)):
-	eq(car(e),atom("DEFUN"))? (a=list(atom("LABEL"),cadr(e),list(atom("LAMBD"),caddr(e),cadddr(e))),
-	    			   env=append(env, list(list(cadr(e),a))), a):
+//	eq(car(e),atom("DEFUN"))? (a=list(atom("LABEL"),cadr(e),list(atom("LAMBDA"),caddr(e),cadddr(e))),
+//	    			   env=append(env, list(list(cadr(e),a))), a):
         eval(cons(assoc(car(e),a),cdr(e)),a)):
         //eval(cons(assoc(car(e),a),evlis(cdr(e),a)),a) ): /*<jmc ^rootsoflisp*/
     objectp(car(e))? 	       evobj(e,a):
     eq(caar(e),atom("LABEL"))? eval(cons(caddar(e),cdr(e)),cons(list(cadar(e),car(e)),a)):
-    eq(caar(e),atom("LAMBD"))? eval(caddar(e),append(pair(cadar(e),evlis(cdr(e),a)),a)):
+    eq(caar(e),atom("LAMBDA"))? eval(caddar(e),append(pair(cadar(e),evlis(cdr(e),a)),a)):
                    /*LAMBDA with 5-char atoms */
     0)
 defun(evcon,(c,a),eval(caar(c),a)?eval(cadar(c),a):evcon(cdr(c),a))
@@ -212,6 +198,7 @@ defun(seta,(a,x,y),(a?rplacd(a,list(y)):(env=append(list(list(x,y),env)))),y)
 defun(set,   (x,y),seta(assocpair(x,env),x,y))
 
 defun(prn,(x),atomp(x)  ?prnatom(x)               : /*print with dot-notation [^stackoverflow]*/
+      	      stringp(x)?prnstring(x)             :
 	      numberp(x)?printf("%d ",val(x))     :
 	      objectp(x)?printf("OBJ_%d ",val(x)) :
 	      consp(x)  ?printf("( "),prn(car(x)),printf(". "),prn(cdr(x)),printf(") "):
@@ -227,8 +214,8 @@ defun(rdbuf,(char**p,char*buf,char c),(c?(c==' '        ?(++(*p),rd(p)          
 			                  c==*RPAR      ?(++(*p),atom(RPAR)           ):
 				          c==*LPAR      ?(++(*p),rdlist(p,NIL,rd(p))  ):
 			                  c>='0'&&c<='9'?        number(rdnum(p,c-'0')):
-					                         atom(rdatom(p,buf,0))  ):0))
-defun(rd,(char**p),rdbuf(p,(char[BUFSZ]){""},**p))
+					        atom(rdatom(p,buf,strcspn(*p,"() \t"))) ):0))
+defun(rd,(char**p),rdbuf(p,(char[ATOMBUFSZ]){""},**p))
 
 //void fix(x){signal(SIGSEGV,fix);sbrk(sizeof(int)*(msz*=2));} /*grow memory in response to memory-access fault*/
 int main(){
@@ -248,6 +235,14 @@ int main(){
     //signal(SIGSEGV,fix); /*might let it run longer, obscures problems*/
     n=m=calloc(msz=getpagesize(),sizeof(int));
 
+    n += 16;
+    atoms = list(
+		 string("T"),
+		 string("NIL")
+		 );
+    //prnlst(atoms);
+    //prnatom(atom("T"));
+    //prnatom(atom("NIL"));
     env = list(
             list(atom("T"),     atom("T")   ),
             list(atom("NIL"),        NIL    ),
@@ -260,6 +255,9 @@ int main(){
             list(atom("SET"),   subr2(set)  ),
             list(atom("SETQ"), fsubr2(set)  )
             );
+    //prnlst(atoms);
+    //prnlst(env);
+    //fflush(stdout);
 
     while(1) {
         //printf("env:\n"); prnlst(env); printf("\n");
