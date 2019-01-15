@@ -33,26 +33,17 @@ https://web.archive.org/web/20070317222311/http://www.modeemi.fi/~chery/lisp500/
 #define RPAR  ")"
 #define ATOMBUFSZ  10
 
-
-/* each word is interpreted as a 2 bit tag
-   and a sizeof(int)*8-2 bit signed number. 32bit int :: 30bit + 2bit tag [^minilisp]*/
-enum { TAGCONS, TAGATOM, TAGOBJ, TAGNUM,
-       TAGBITS = 2,
-       TAGMASK = (1U<<TAGBITS)-1 };
-defun(  val,  (x),x>>TAGBITS)
-defun(  tag,  (x),x&TAGMASK)
-defun(  listp,(x),tag(x)==TAGCONS) /* predicates */
-defun(  atomp,(x),tag(x)==TAGATOM)
-defun(objectp,(x),tag(x)==TAGOBJ)
-defun(numberp,(x),tag(x)==TAGNUM)
-defun(  consp,(x),x&&listp(x))
-
-
 /* memory is organized as a large array of ints
    each int is a "word" and memory can be accessed by
        m[int]
    the int here is a cursor called herein a "pointer" (<-- always in quotes) [^codegolf jar2]*/
 int*m,*n,msz; /*memory next mem-size*/
+
+/* global environment for REPL, modified by SET, SETQ and DEFUN */
+int env;
+
+/* head of atom list */
+int atoms;
 
 /*build lists [^ppnarg found in:comp.lang.c ^variadic functions:k&r2]
   list() variadic macro uses ppnarg.h to count the arguments and call listn
@@ -65,10 +56,6 @@ int listn(int c,...){va_list a;int*z=n;
     va_start(a,c);for(;c--;)*n++=va_arg(a,int);va_end(a);
     c=n-z;return lista(c,z);}
 #define list(...) listn(PP_NARG(__VA_ARGS__),__VA_ARGS__)
-
-
-/* global environment for REPL, modified by SET, SETQ and DEFUN */
-int env;
 
 /* bias the alphabet at the ascii code for T,  [<my own brilliant idea]
    this way, the word 1 means 30bit 0 + 2bit 01 :: the symbol T
@@ -86,10 +73,13 @@ int env;
    [^minilisp ^lisp500]
 */
 
-//defun(atom,(char*s),0)
-//defun(prnatom,(unsigned x),0)
-//defun(rdatom,(char**p,char*buf,int i),atom(buf))
-
+/* each word is interpreted as a 2 bit tag
+   and a sizeof(int)*8-2 bit signed number. 32bit int :: 30bit + 2bit tag [^minilisp]*/
+enum { TAGCONS, TAGATOM, TAGOBJ, TAGNUM,
+       TAGBITS = 2,
+       TAGMASK = (1U<<TAGBITS)-1 };
+defun(  val,  (x),x>>TAGBITS)
+defun(  tag,  (x),x&TAGMASK)
 defun(number, (x),     x<<TAGBITS|TAGNUM)
 defun(object, (x),     x<<TAGBITS|TAGOBJ)
 enum objecttag {SUBR, FSUBR, SUBR2, FSUBR2, STRING};
@@ -97,6 +87,7 @@ union object {int tag;
       struct {int tag; int(*f)();} f;
       struct {int tag; char*s;   } s;
                                      };
+/* ffi */
 defun(objptr, (union object*p,union object o),*p=o,object((int*)p-m))
 union object*newobjptr(){void *p=n;return n+=(sizeof(union object)+sizeof*n-1)/sizeof*n,p;}
 defun(objfunc,(enum objecttag t,int(*f)()),objptr(newobjptr(),(union object){.f={.tag=t,.f=f}}) )
@@ -105,24 +96,23 @@ defun(fsubr1,(int(*f)()),objfunc(FSUBR, f))
 defun( subr2,(int(*f)()),objfunc( SUBR2,f))
 defun(fsubr2,(int(*f)()),objfunc(FSUBR2,f))
 
+/* strings and atoms */
 char*newstrptr(char*s){return n+=(strlen(s)+1+sizeof*n-1)/sizeof*n,s;}
 defun(objstr,(char*s),objptr(newobjptr(),(union object){.s={.tag=STRING,.s=s}}))
 defun(string,(char*s),objstr(newstrptr(strcpy((char*)n,s))))
-union object *strobj(int x){return (void *) &m[x>>TAGBITS];}
-defun(prnstring,(x),printf("%s ", strobj(x)->s.s))
-defun(stringp,(x),tag(x)==TAGOBJ&&strobj(x)->tag==STRING)
-
-defun(prnatom,(unsigned x),prnatom0(x>>TAGBITS),printf(" "))
-defun(atom,   (char*s),encstr(s)<<TAGBITS|TAGATOM)
-char *rdatom(char**p,char*buf,int i){return memcpy(buf,*p,i), (*p)+=i, buf;}
-
-int atoms;
-defun(findstr, (char*s,int slist,int i), !strcmp(strobj(car(slist))->s.s,s)? i:
-            		    cdr(slist)? findstr(s,cdr(slist),i+1): (rplacd(slist,list(string(s))),i+1))
+union object*strobj(int x){return(void*)&m[x>>TAGBITS];}
+defun(findstr,(char*s,int slist,int i), !strcmp(strobj(car(slist))->s.s,s)? i:
+            		    cdr(slist)?findstr(s,cdr(slist),i+1):(rplacd(slist,list(string(s))),i+1))
 defun(encstr, (char*s),findstr(s,atoms,0))
+defun(atom,   (char*s),encstr(s)<<TAGBITS|TAGATOM)
 
-defun(prnatomx,(x,atoms),x?prnatomx(x-1,cdr(atoms)):printf("%s", strobj(car(atoms))->s.s))
-defun(prnatom0,(x),prnatomx(x,atoms))
+/* predicates */
+defun(  listp,(x),tag(x)==TAGCONS)
+defun(  atomp,(x),tag(x)==TAGATOM)
+defun(objectp,(x),tag(x)==TAGOBJ)
+defun(numberp,(x),tag(x)==TAGNUM)
+defun(  consp,(x),x&&listp(x))
+defun(stringp,(x),tag(x)==TAGOBJ&&strobj(x)->tag==STRING)
 
 /*manipulating lists.
   val() of course returns an int i which indexes `int *m;`
@@ -156,6 +146,12 @@ defun(among,(x,y),!null(y)&&equal(x,car(y))||among(x,cdr(y)))
 defun(pair,(x,y),null(x)&&null(y)?NIL:consp(x)&&consp(y)? cons(list(car(x),car(y)),pair(cdr(x),cdr(y))):0)
 defun(assoc,(x,y),eq(caar(y),x)?cadar(y):null(y)?0:assoc(x,cdr(y)))
 
+defun(assocpair,(x,y),eq(caar(y),x)?car(y):null(y)?0:assocpair(x,cdr(y)))
+defun(seta,(a,x,y),(a?rplacd(a,list(y)):(env=append(list(list(x,y),env)))),y)
+defun(set,   (x,y),seta(assocpair(x,env),x,y))
+defun(maplist,(x,f),null(x)?NIL:cons(apply(f,x),maplist(cdr(x),f)))
+
+
 /*the universal function eval() [^jmc]*/
 defun(sub2,(x,z),null(x)?z:eq(caar(x),z)?cadar(x):sub2(cdr(x),z))
 defun(sublis,(x,y),atomp(y)?sub2(x,y):cons(sublis(x,car(y)),sublis(x,cdr(y))))
@@ -174,40 +170,39 @@ defun(eval,(e,a),
 	eq(car(e),atom("CDR"))?   cdr(eval(cadr(e),a)):
 	eq(car(e),atom("CONS"))?  cons(eval(cadr(e),a),eval(caddr(e),a)):
 //	eq(car(e),atom("DEFUN"))? (a=list(atom("LABEL"),cadr(e),list(atom("LAMBDA"),caddr(e),cadddr(e))),
-//	    			   env=append(env, list(list(cadr(e),a))), a):
+//	    			   env=append(env, list(list(cadr(e),a))), a): /* optional DEFUN special */
         eval(cons(assoc(car(e),a),cdr(e)),a)):
         //eval(cons(assoc(car(e),a),evlis(cdr(e),a)),a) ): /*<jmc ^rootsoflisp*/
     objectp(car(e))? 	       evobj(e,a):
     eq(caar(e),atom("LABEL"))? eval(cons(caddar(e),cdr(e)),cons(list(cadar(e),car(e)),a)):
     eq(caar(e),atom("LAMBDA"))? eval(caddar(e),append(pair(cadar(e),evlis(cdr(e),a)),a)):
-                   /*LAMBDA with 5-char atoms */
     0)
 defun(evcon,(c,a),eval(caar(c),a)?eval(cadar(c),a):evcon(cdr(c),a))
 defun(evlis,(m,a),null(m)?NIL:cons(eval(car(m),a),evlis(cdr(m),a)))
-
 defun(evobjo,(o,e,a)union object o;, o.tag== SUBR ? o.f.f(eval(cadr(e),a)):
                                      o.tag==FSUBR ? o.f.f(cdr(e)):
 			             o.tag== SUBR2? o.f.f(eval(cadr(e),a), eval(caddr(e),a)):
                                      o.tag==FSUBR2? o.f.f(cadr(e),caddr(e)): 0)
 defun(evobj,(e,a),evobjo(*(union object*)(m+val(car(e))),e,a))
 
-defun(maplist,(x,f),null(x)?NIL:cons(apply(f,x),maplist(cdr(x),f)))
-
-defun(assocpair,(x,y),eq(caar(y),x)?car(y):null(y)?0:assocpair(x,cdr(y)))
-defun(seta,(a,x,y),(a?rplacd(a,list(y)):(env=append(list(list(x,y),env)))),y)
-defun(set,   (x,y),seta(assocpair(x,env),x,y))
-
+/* printing */
 defun(prn,(x),atomp(x)  ?prnatom(x)               : /*print with dot-notation [^stackoverflow]*/
       	      stringp(x)?prnstring(x)             :
 	      numberp(x)?printf("%d ",val(x))     :
 	      objectp(x)?printf("OBJ_%d ",val(x)) :
 	      consp(x)  ?printf("( "),prn(car(x)),printf(". "),prn(cdr(x)),printf(") "):
 	                 printf("NIL "))
+defun(prnstring,(x),printf("\"%s\" ", strobj(x)->s.s))
+defun(prnatomx,(x,atoms),x?prnatomx(x-1,cdr(atoms)):printf("%s", strobj(car(atoms))->s.s))
+defun(prnatom0,(x),prnatomx(x,atoms))
+defun(prnatom,(unsigned x),prnatom0(x>>TAGBITS),printf(" "))
 defun(prnlstn,(x),!listp(x)?prn(x):
         ((car(x)?prnlst(car(x)):0),(cdr(x)?prnlstn(cdr(x)):0)))
 defun(prnlst,(x),!listp(x)?prn(x):
         (printf(LPAR),(car(x)?prnlst(car(x)):0),(cdr(x)?prnlstn(cdr(x)):0),printf(RPAR)))
 
+/* reading */
+char *rdatom(char**p,char*buf,int i){return memcpy(buf,*p,i), (*p)+=i, buf;}
 defun(rdlist,(p,z,u)char**p;,u==atom(RPAR)?z:append(cons(u,NIL),rdlist(p,z,rd(p))))
 defun(rdnum,(p,v)char**p;,*++*p>='0'&&**p<='9'?rdnum(p,v*10+**p-'0'):v)
 defun(rdbuf,(char**p,char*buf,char c),(c?(c==' '        ?(++(*p),rd(p)                ):
@@ -217,7 +212,7 @@ defun(rdbuf,(char**p,char*buf,char c),(c?(c==' '        ?(++(*p),rd(p)          
 					        atom(rdatom(p,buf,strcspn(*p,"() \t"))) ):0))
 defun(rd,(char**p),rdbuf(p,(char[ATOMBUFSZ]){""},**p))
 
-//void fix(x){signal(SIGSEGV,fix);sbrk(sizeof(int)*(msz*=2));} /*grow memory in response to memory-access fault*/
+//void fix(x){signal(SIGSEGV,fix);sbrk(sizeof(int)*(msz*=2));}/*grow memory in response to access fault*/
 int main(){
     //char *s;
     char s[BUFSIZ];
@@ -237,23 +232,23 @@ int main(){
 
     n += 16;
     atoms = list(
-		 string("T"),
+		 string("T"), // "T" must be first
 		 string("NIL")
 		 );
     //prnlst(atoms);
     //prnatom(atom("T"));
     //prnatom(atom("NIL"));
     env = list(
-            list(atom("T"),     atom("T")   ),
-            list(atom("NIL"),        NIL    ),
-            list(atom("CAAR"),  subr1(caar) ),
-            list(atom("CADR"),  subr1(cadr) ),
-            list(atom("CDDR"),  subr1(cddr) ),
-            list(atom("CADAR"), subr1(cadar)),
-            list(atom("CADDR"), subr1(caddr)),
-            list(atom("CDDDR"), subr1(cdddr)),
-            list(atom("SET"),   subr2(set)  ),
-            list(atom("SETQ"), fsubr2(set)  )
+	       list(atom("T"),     atom("T")   ),
+	       list(atom("NIL"),        NIL    ),
+	       list(atom("CAAR"),  subr1(caar) ),
+	       list(atom("CADR"),  subr1(cadr) ),
+	       list(atom("CDDR"),  subr1(cddr) ),
+	       list(atom("CADAR"), subr1(cadar)),
+	       list(atom("CADDR"), subr1(caddr)),
+	       list(atom("CDDDR"), subr1(cdddr)),
+	       list(atom("SET"),   subr2(set)  ),
+	       list(atom("SETQ"), fsubr2(set)  )
             );
     //prnlst(atoms);
     //prnlst(env);
