@@ -27,8 +27,7 @@ https://web.archive.org/web/20070317222311/http://www.modeemi.fi/~chery/lisp500/
 /*defun macro thanks to Kaz Kylheku: https://groups.google.com/d/msg/comp.lang.c/FiC6hbH1azw/-Tiuw2oQoyAJ*/
 #define defun(NAME,ARGS,...) int NAME ARGS { return __VA_ARGS__; }
 #define ALPHA "T"
-#define NIL   (0)
-#define T atom(ALPHA)
+#define nil   (0)
 #define LPAR  "("
 #define RPAR  ")"
 #define ATOMBUFSZ  10
@@ -51,7 +50,7 @@ https://github.com/luser-dr00g/sexp.c/blob/master/ppnarg.h
   listn() variadic function copies n (int) arguments to memory and call lista
   lista() constructs a list of n elements from pointer to memory
  */
-int lista(int c,int*a){int z=NIL;for(;c;)z=cons(a[--c],z);return z;}
+int lista(int c,int*a){int z=nil;for(;c;)z=cons(a[--c],z);return z;}
 int listn(int c,...){va_list a;int*z=n;
     va_start(a,c);for(;c--;)*n++=va_arg(a,int);va_end(a);
     c=n-z;return lista(c,z);}
@@ -87,6 +86,13 @@ union object {int tag;
       struct {int tag; int(*f)();} f;
       struct {int tag; char*s;   } s;
                                      };
+
+#define ATOMSEEDS(x) \
+  x(T),x(NIL),x(SETQ),x(QUOTE),x(ATOM),x(EQ),x(COND),x(CAR),x(CDR),x(LAMBDA),x(LABEL),x(CONS)
+#define atom_enum(x) ATOM##x
+#define shortcut(x) x=ATOM##x<<TAGBITS|TAGATOM
+enum{ATOMSEEDS(atom_enum),ATOMSEEDS(shortcut)};
+
 /* ffi */
 defun(objptr, (union object*p,union object o),*p=o,object((int*)p-m))
 union object*newobjptr(){void *p=n;return n+=(sizeof(union object)+sizeof*n-1)/sizeof*n,p;}
@@ -143,42 +149,42 @@ defun(null,(x),listp(x)&&val(x)==0) /*list == NIL?*/
 /*association lists [^jmc]*/
 defun(append,(x,y),null(x)?y:cons(car(x),append(cdr(x),y)))
 defun(among,(x,y),!null(y)&&equal(x,car(y))||among(x,cdr(y)))
-defun(pair,(x,y),null(x)&&null(y)?NIL:consp(x)&&consp(y)? cons(list(car(x),car(y)),pair(cdr(x),cdr(y))):0)
+defun(pair,(x,y),null(x)&&null(y)?nil:consp(x)&&consp(y)? cons(list(car(x),car(y)),pair(cdr(x),cdr(y))):0)
 defun(assoc,(x,y),eq(caar(y),x)?cadar(y):null(y)?0:assoc(x,cdr(y)))
 
 defun(assocpair,(x,y),eq(caar(y),x)?car(y):null(y)?0:assocpair(x,cdr(y)))
 defun(seta,(a,x,y),(a?rplacd(a,list(y)):(env=append(list(list(x,y),env)))),y)
 defun(set,   (x,y),seta(assocpair(x,env),x,y))
-defun(maplist,(x,f),null(x)?NIL:cons(apply(f,x),maplist(cdr(x),f)))
+defun(maplist,(x,f),null(x)?nil:cons(apply(f,x),maplist(cdr(x),f)))
 
 
 /*the universal function eval() [^jmc]*/
 defun(sub2,(x,z),null(x)?z:eq(caar(x),z)?cadar(x):sub2(cdr(x),z))
 defun(sublis,(x,y),atomp(y)?sub2(x,y):cons(sublis(x,car(y)),sublis(x,cdr(y))))
-defun(apply,(f,args),eval(cons(f,appq(args)),NIL))
-defun(appq,(m),null(m)?NIL:cons(list(atom("QUOTE"),car(m)),appq(cdr(m))))
+defun(apply,(f,args),eval(cons(f,appq(args)),nil))
+defun(appq,(m),null(m)?nil:cons(list(QUOTE,car(m)),appq(cdr(m))))
 defun(eval,(e,a),
     //prnlst(e), printf("\n"),
     numberp(e)? e:
     atomp(e)? assoc(e,a):
     atomp(car(e))?(
-	eq(car(e),atom("QUOTE"))? cadr(e):
-	eq(car(e),atom("ATOM"))?  atomp(eval(cadr(e),a)):
-	eq(car(e),atom("EQ"))?    eval(cadr(e),a)==eval(caddr(e),a):
-	eq(car(e),atom("COND"))?  evcon(cdr(e),a):
-	eq(car(e),atom("CAR"))?   car(eval(cadr(e),a)):
-	eq(car(e),atom("CDR"))?   cdr(eval(cadr(e),a)):
-	eq(car(e),atom("CONS"))?  cons(eval(cadr(e),a),eval(caddr(e),a)):
+	eq(car(e),QUOTE)? cadr(e):
+	eq(car(e),ATOM)?  atomp(eval(cadr(e),a)):
+	eq(car(e),EQ)?    eval(cadr(e),a)==eval(caddr(e),a):
+	eq(car(e),COND)?  evcon(cdr(e),a):
+	eq(car(e),CAR)?   car(eval(cadr(e),a)):
+	eq(car(e),CDR)?   cdr(eval(cadr(e),a)):
+	eq(car(e),CONS)?  cons(eval(cadr(e),a),eval(caddr(e),a)):
 //	eq(car(e),atom("DEFUN"))? (a=list(atom("LABEL"),cadr(e),list(atom("LAMBDA"),caddr(e),cadddr(e))),
 //	    			   env=append(env, list(list(cadr(e),a))), a): /* optional DEFUN special */
         eval(cons(assoc(car(e),a),cdr(e)),a)):
         //eval(cons(assoc(car(e),a),evlis(cdr(e),a)),a) ): /*<jmc ^rootsoflisp*/
     objectp(car(e))? 	       evobj(e,a):
-    eq(caar(e),atom("LABEL"))? eval(cons(caddar(e),cdr(e)),cons(list(cadar(e),car(e)),a)):
-    eq(caar(e),atom("LAMBDA"))? eval(caddar(e),append(pair(cadar(e),evlis(cdr(e),a)),a)):
+    eq(caar(e),LABEL)? eval(cons(caddar(e),cdr(e)),cons(list(cadar(e),car(e)),a)):
+    eq(caar(e),LAMBDA)? eval(caddar(e),append(pair(cadar(e),evlis(cdr(e),a)),a)):
     0)
 defun(evcon,(c,a),eval(caar(c),a)?eval(cadar(c),a):evcon(cdr(c),a))
-defun(evlis,(m,a),null(m)?NIL:cons(eval(car(m),a),evlis(cdr(m),a)))
+defun(evlis,(m,a),null(m)?nil:cons(eval(car(m),a),evlis(cdr(m),a)))
 defun(evobjo,(o,e,a)union object o;, o.tag== SUBR ? o.f.f(eval(cadr(e),a)):
                                      o.tag==FSUBR ? o.f.f(cdr(e)):
 			             o.tag== SUBR2? o.f.f(eval(cadr(e),a), eval(caddr(e),a)):
@@ -203,11 +209,11 @@ defun(prnlst,(x),!listp(x)?prn(x):
 
 /* reading */
 char *rdatom(char**p,char*buf,int i){return memcpy(buf,*p,i), (*p)+=i, buf;}
-defun(rdlist,(p,z,u)char**p;,u==atom(RPAR)?z:append(cons(u,NIL),rdlist(p,z,rd(p))))
+defun(rdlist,(p,z,u)char**p;,u==atom(RPAR)?z:append(cons(u,nil),rdlist(p,z,rd(p))))
 defun(rdnum,(p,v)char**p;,*++*p>='0'&&**p<='9'?rdnum(p,v*10+**p-'0'):v)
 defun(rdbuf,(char**p,char*buf,char c),(c?(c==' '        ?(++(*p),rd(p)                ):
 			                  c==*RPAR      ?(++(*p),atom(RPAR)           ):
-				          c==*LPAR      ?(++(*p),rdlist(p,NIL,rd(p))  ):
+				          c==*LPAR      ?(++(*p),rdlist(p,nil,rd(p))  ):
 			                  c>='0'&&c<='9'?        number(rdnum(p,c-'0')):
 					        atom(rdatom(p,buf,strcspn(*p,"() \t"))) ):0))
 defun(rd,(char**p),rdbuf(p,(char[ATOMBUFSZ]){""},**p))
@@ -232,15 +238,15 @@ int main(){
 
     n += 16;
     atoms = list(
-		 string("T"), // "T" must be first
-		 string("NIL")
+#define TO_STRING(x) string(#x)
+		 ATOMSEEDS(TO_STRING)
 		 );
     //prnlst(atoms);
     //prnatom(atom("T"));
     //prnatom(atom("NIL"));
     env = list(
-	       list(atom("T"),     atom("T")   ),
-	       list(atom("NIL"),        NIL    ),
+	       list(T,     atom("T")   ),
+	       list(NIL,        nil    ),
 	       list(atom("CAAR"),  subr1(caar) ),
 	       list(atom("CADR"),  subr1(cadr) ),
 	       list(atom("CDDR"),  subr1(cddr) ),
@@ -248,7 +254,7 @@ int main(){
 	       list(atom("CADDR"), subr1(caddr)),
 	       list(atom("CDDDR"), subr1(cdddr)),
 	       list(atom("SET"),   subr2(set)  ),
-	       list(atom("SETQ"), fsubr2(set)  )
+	       list(SETQ, fsubr2(set)  )
             );
     //prnlst(atoms);
     //prnlst(env);
