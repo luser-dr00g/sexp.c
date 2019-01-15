@@ -26,7 +26,6 @@ https://web.archive.org/web/20070317222311/http://www.modeemi.fi/~chery/lisp500/
 
 /*defun macro thanks to Kaz Kylheku: https://groups.google.com/d/msg/comp.lang.c/FiC6hbH1azw/-Tiuw2oQoyAJ*/
 #define defun(NAME,ARGS,...) int NAME ARGS { return __VA_ARGS__; }
-#define ALPHA "T"
 #define nil   (0)
 #define LPAR  "("
 #define RPAR  ")"
@@ -85,10 +84,11 @@ enum objecttag {SUBR, FSUBR, SUBR2, FSUBR2, STRING};
 union object {int tag;
       struct {int tag; int(*f)();} f;
       struct {int tag; char*s;   } s;
-                                     };
+};
 
 #define ATOMSEEDS(x) \
-  x(T),x(NIL),x(SETQ),x(QUOTE),x(ATOM),x(EQ),x(COND),x(CAR),x(CDR),x(LAMBDA),x(LABEL),x(CONS)
+  x(T),x(NIL),x(SETQ),x(QUOTE),x(ATOM),x(EQ),x(COND),\
+  x(CAR),x(CDR),x(LAMBDA),x(LABEL),x(CONS),x(DEFUN)
 #define atom_enum(x) ATOM##x
 #define shortcut(x) x=ATOM##x<<TAGBITS|TAGATOM
 enum{ATOMSEEDS(atom_enum),ATOMSEEDS(shortcut)};
@@ -107,8 +107,8 @@ char*newstrptr(char*s){return n+=(strlen(s)+1+sizeof*n-1)/sizeof*n,s;}
 defun(objstr,(char*s),objptr(newobjptr(),(union object){.s={.tag=STRING,.s=s}}))
 defun(string,(char*s),objstr(newstrptr(strcpy((char*)n,s))))
 union object*strobj(int x){return(void*)&m[x>>TAGBITS];}
-defun(findstr,(char*s,int slist,int i), !strcmp(strobj(car(slist))->s.s,s)? i:
-            		    cdr(slist)?findstr(s,cdr(slist),i+1):(rplacd(slist,list(string(s))),i+1))
+defun(findstr,(char*s,int slist,int i),!strcmp(strobj(car(slist))->s.s,s)?i:
+    cdr(slist)?findstr(s,cdr(slist),i+1):(rplacd(slist,list(string(s))),i+1))
 defun(encstr, (char*s),findstr(s,atoms,0))
 defun(atom,   (char*s),encstr(s)<<TAGBITS|TAGATOM)
 
@@ -175,8 +175,8 @@ defun(eval,(e,a),
 	eq(car(e),CAR)?   car(eval(cadr(e),a)):
 	eq(car(e),CDR)?   cdr(eval(cadr(e),a)):
 	eq(car(e),CONS)?  cons(eval(cadr(e),a),eval(caddr(e),a)):
-//	eq(car(e),atom("DEFUN"))? (a=list(atom("LABEL"),cadr(e),list(atom("LAMBDA"),caddr(e),cadddr(e))),
-//	    			   env=append(env, list(list(cadr(e),a))), a): /* optional DEFUN special */
+	eq(car(e),DEFUN)? (a=list(atom("LABEL"),cadr(e),list(atom("LAMBDA"),caddr(e),cadddr(e))),
+	    			   env=append(env, list(list(cadr(e),a))), a): /* optional DEFUN special */
         eval(cons(assoc(car(e),a),cdr(e)),a)):
         //eval(cons(assoc(car(e),a),evlis(cdr(e),a)),a) ): /*<jmc ^rootsoflisp*/
     objectp(car(e))? 	       evobj(e,a):
@@ -230,23 +230,23 @@ int main(){
     assert((-1 & 3) == 3); /* that ints are 2's complement */
     assert((-1 >> 1) < 0); /* that right shift keeps sign */
     //assert((-1>>1)==-1);	/*require 2's-complement and right-shift must be sign-preserving */
+
     //printf("");  /* exercise stdio so it (hopefully) malloc's what it needs before we take sbrk() */
     //snprintf(NULL, 0, "%c%d%f", 'x', 42, 72.27);
     //n=m=sbrk(sizeof(int)*(msz=getpagesize()));*n++=0;*n++=0; /*initialize memory and begin at cell 2*/
     //signal(SIGSEGV,fix); /*might let it run longer, obscures problems*/
     n=m=calloc(msz=getpagesize(),sizeof(int));
+    n += 16; /* skip very low memory */
 
-    n += 16;
-    atoms = list(
 #define TO_STRING(x) string(#x)
-		 ATOMSEEDS(TO_STRING)
-		 );
+    atoms = list(ATOMSEEDS(TO_STRING));
     //prnlst(atoms);
     //prnatom(atom("T"));
     //prnatom(atom("NIL"));
+
     env = list(
-	       list(T,     atom("T")   ),
-	       list(NIL,        nil    ),
+	       list(T,             T           ),
+	       list(NIL,           nil         ),
 	       list(atom("CAAR"),  subr1(caar) ),
 	       list(atom("CADR"),  subr1(cadr) ),
 	       list(atom("CDDR"),  subr1(cddr) ),
@@ -254,7 +254,7 @@ int main(){
 	       list(atom("CADDR"), subr1(caddr)),
 	       list(atom("CDDDR"), subr1(cdddr)),
 	       list(atom("SET"),   subr2(set)  ),
-	       list(SETQ, fsubr2(set)  )
+	       list(SETQ,          fsubr2(set)  )
             );
     //prnlst(atoms);
     //prnlst(env);
