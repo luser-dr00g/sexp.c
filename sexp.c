@@ -48,6 +48,24 @@ int*m,*n,msz, /*memory next mem-size*/
     env, /* global environment for REPL, modified by SET, SETQ and DEFUN */
     atoms;  /* head of atom list */
 
+#define INIT_ENVIRONMENT                           \
+    env = list(                                    \
+	       list(T,              T           ), \
+	       list(NIL,            nil         ), \
+	       list(atom("CAAR"),   subr1(caar) ), \
+	       list(atom("CADR"),   subr1(cadr) ), \
+	       list(atom("CDDR"),   subr1(cddr) ), \
+	       list(atom("CADAR"),  subr1(cadar)), \
+	       list(atom("CADDR"),  subr1(caddr)), \
+	       list(atom("CDDDR"),  subr1(cdddr)), \
+	       list(atom("SET"),    subr2(set)  ), \
+	       list(SETQ,          fsubr2(set)  )  \
+            );
+
+#define ATOM_PROPS(x)     list(TO_STRING(x))
+#define INIT_ATOM_LIST    atoms = list(ATOMSEEDS(ATOM_PROPS));
+
+
 /*build lists [^ppnarg found in:comp.lang.c ^variadic functions:k&r2]
   list() variadic macro uses ppnarg.h to count the arguments and call listn
 https://github.com/luser-dr00g/sexp.c/blob/master/ppnarg.h
@@ -101,11 +119,12 @@ defun(fsubr2,(int(*f)()),objfunc(FSUBR2,f))
 #define atom_enum(x) ATOM_##x
 #define short_cut(x) x=atom_enum(x)<<TAGBITS|TAGATOM
 enum{ATOMSEEDS(atom_enum),ATOMSEEDS(short_cut)};
+#define TO_STRING(x) string(#x)
 char*newstrptr(char*s){return n+=(strlen(s)+1+sizeof*n-1)/sizeof*n,s;}
 defun(objstr, (char*s),objptr(newobjptr(n),(union object){.s={.tag=STRING,.s=s}}))
 defun(string, (char*s),objstr(newstrptr(strcpy((char*)n,s))))
-defun(findstr,(s,slist,i)char*s;,!strcmp(ptrobj(car(slist))->s.s,s)?i:
-    cdr(slist)?findstr(s,cdr(slist),i+1):(rplacd(slist,list(string(s))),i+1))
+defun(findstr,(s,slist,i)char*s;,!strcmp(ptrobj(caar(slist))->s.s,s)?i:
+      cdr(slist)?findstr(s,cdr(slist),i+1):(rplacd(slist,list(list(string(s)))),i+1))
 defun(encstr, (char*s),findstr(s,atoms,0))
 defun(atom,   (char*s),encstr(s)<<TAGBITS|TAGATOM)
 
@@ -191,7 +210,7 @@ defun(prn,      (x),atomp(x)  ?prnatom(x)               : /*print with dot-notat
 	            consp(x)  ?printf("( "),prn(car(x)),printf(". "),prn(cdr(x)),printf(") "):
 	                       printf("NIL "))
 defun(prnstring,(x),printf("\"%s\" ", ptrobj(x)->s.s))
-defun(prnatomx, (x,atoms),x?prnatomx(x-1,cdr(atoms)):printf("%s", ptrobj(car(atoms))->s.s))
+defun(prnatomx, (x,atoms),x?prnatomx(x-1,cdr(atoms)):printf("%s", ptrobj(caar(atoms))->s.s))
 defun(prnatom0, (x),prnatomx(x,atoms))
 defun(prnatom,  (unsigned x),prnatom0(x>>TAGBITS),printf(" "))
 defun(prnlstn,  (x),!listp(x)?prn(x):
@@ -199,6 +218,7 @@ defun(prnlstn,  (x),!listp(x)?prn(x):
 defun(prnlst,   (x),!listp(x)?prn(x):
         (printf(LPAR),(car(x)?prnlst (car(x)):0),
 		      (cdr(x)?prnlstn(cdr(x)):0),printf(RPAR)))
+
 
 char*rdatom(char**p,char*buf,int i){return memcpy(buf,*p,i),buf[i]=0,(*p)+=i,buf;}
 defun(rdlist,(p,z,u)char**p;,u==atom(RPAR)?z:append(cons(u,nil),rdlist(p,z,rd(p))))
@@ -209,6 +229,44 @@ defun(rdbuf, (char**p,char*buf,char c),c?(c==' '        ?(++(*p),rd(p)          
 			                  c>='0'&&c<='9'?        number(rdnum(p,c-'0')):
 					        atom(rdatom(p,buf,strcspn(*p,"() \t"))) ):0)
 defun(rd,    (char**p),rdbuf(p,(char[ATOMBUFSZ]){""},**p))
+
+int readline(char *s,size_t sz){
+    printf(">"), fflush(0);
+    if (!fgets(s,sz,stdin))
+	return 0;
+    s[strlen(s)-1]=0;
+    IFDEBUG(0,printf ("%s\n", s));
+    return 1;
+}
+
+int repl(){
+    char s[BUFSIZ], *p = s;
+    IFDEBUG(0,printf("env:\n"), prnlst(env), printf("\n"));
+
+    if (!readline(s,sizeof(s)))
+        return 0;
+
+    int x = rd (&p);
+    IFDEBUG(0,prn(x), printf("\n"));
+    IFDEBUG(0,prnlst(x), fflush(0));
+
+    IFDEBUG(0,printf("\nEVAL\n"));
+    x = eval(x, env);
+
+    IFDEBUG(0,
+	printf("x: %d\n", x),
+	printf("0: %o\n", x),
+	printf("0x: %x\n", x),
+	printf("tag(x): %d\n", tag (x)),
+	printf("val(x): %d\n", val (x)),
+	printf("car(x): %d\n", car (x)),
+	printf("cdr(x): %d\n", cdr (x)),
+	prn(x), printf("\n")
+    );
+    prnlst(x), printf("\n");
+
+    return repl();
+}
 
 //void fix(x){signal(SIGSEGV,fix);sbrk(sizeof(int)*(msz*=2));}/*grow memory in response to access fault*/
 int main(){
@@ -224,57 +282,15 @@ int main(){
     //signal(SIGSEGV,fix); /*might let it run longer, obscures problems*/
     n=16+(m=calloc(msz=getpagesize(),sizeof(int)));
 
-#define TO_STRING(x) string(#x)
-    atoms = list(ATOMSEEDS(TO_STRING));
+    INIT_ATOM_LIST
     IFDEBUG(0,prnlst(atoms));
-    IFDEBUG(0,prnatom(atom("T")));
-    IFDEBUG(0,prnatom(atom("NIL")));
+    IFDEBUG(2,prnatom(atom("T")));
+    IFDEBUG(2,prnatom(atom("NIL")));
 
-    env = list(
-	       list(T,              T           ),
-	       list(NIL,            nil         ),
-	       list(atom("CAAR"),   subr1(caar) ),
-	       list(atom("CADR"),   subr1(cadr) ),
-	       list(atom("CDDR"),   subr1(cddr) ),
-	       list(atom("CADAR"),  subr1(cadar)),
-	       list(atom("CADDR"),  subr1(caddr)),
-	       list(atom("CDDDR"),  subr1(cdddr)),
-	       list(atom("SET"),    subr2(set)  ),
-	       list(SETQ,          fsubr2(set)  )
-            );
-    IFDEBUG(0,prnlst(atoms));
-    IFDEBUG(0,prnlst(env),fflush(stdout));
+    INIT_ENVIRONMENT
+    IFDEBUG(2,prnlst(atoms));
+    IFDEBUG(2,prnlst(env),fflush(stdout));
     
-
-    while(1) {
-	char s[BUFSIZ], *p = s;
-        IFDEBUG(0,printf("env:\n"), prnlst(env), printf("\n"));
-
-        printf(">"), fflush(0);
-        if (!fgets(s,sizeof s,stdin))
-            break;
-        s[strlen(s)-1]=0;
-        IFDEBUG(0,printf ("%s\n", s));
-
-	int x = rd (&p);
-        IFDEBUG(0,prn(x), printf("\n"));
-        IFDEBUG(0,prnlst(x), fflush(0));
-
-        IFDEBUG(0,printf("\nEVAL\n"));
-        x = eval(x, env);
-
-        IFDEBUG(0,
-	    printf("x: %d\n", x),
-	    printf("0: %o\n", x),
-	    printf("0x: %x\n", x),
-	    printf("tag(x): %d\n", tag (x)),
-	    printf("val(x): %d\n", val (x)),
-	    printf("car(x): %d\n", car (x)),
-	    printf("cdr(x): %d\n", cdr (x)),
-	    prn(x), printf("\n")
-	);
-        prnlst(x), printf("\n");
-    }
-
-    return 0;
+    return repl();
 }
+
