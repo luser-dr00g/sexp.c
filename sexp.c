@@ -1,19 +1,5 @@
-/* sexp.c - an integer-coded tiny lisp.
-
-  $ make test
-
-cf.
-http://www.ioccc.org/1989/jar.2.c                             <-- memory 'cursors'
-http://leon.bottou.org/projects/minilisp                      <-- compact 'C'-able cell encoding
-http://www.jsoftware.com/jwiki/Essays/Incunabulum             <-- tiny APL interpreter
-http://www-formal.stanford.edu/jmc/recursive/recursive.html   <-- original lisp paper
-http://www.paulgraham.com/rootsoflisp.html                    <-- alternate presentation of core (with bugfix)
-http://www.cse.sc.edu/~mgv/csce330f13/micromanualLISP.pdf     <-- original micro-manual for lisp
-http://codegolf.stackexchange.com/questions/284/write-an-interpreter-for-the-untyped-lambda-calculus/3290#3290
-http://stackoverflow.com/questions/18096456/why-wont-my-little-lisp-quote  <-- earlier version of this program
-http://www.nhplace.com/kent/Papers/Special-Forms.html         <-- FEXPRs NLAMBDAs and MACROs, oh my!
-https://web.archive.org/web/20070317222311/http://www.modeemi.fi/~chery/lisp500/lisp500.c  <-- similar idea
- */
+//  sexp.c - an integer-coded tiny lisp.
+//  comments at end
 #include<assert.h>
 #include<ctype.h>
 #include<signal.h>
@@ -27,18 +13,16 @@ https://web.archive.org/web/20070317222311/http://www.modeemi.fi/~chery/lisp500/
 #ifdef DEBUGMODE
    #define CHECK_DEBUG_LEVEL(LVL) (LVL<=DEBUGMODE)
    #define DEBUG(LVL,...) ( CHECK_DEBUG_LEVEL(LVL) ? fprintf(stderr, __VA_ARGS__) : 0 )
-#define IFDEBUG(LVL,...) do if (CHECK_DEBUG_LEVEL(LVL)) { __VA_ARGS__; } while(0)
+#define IFDEBUG(LVL,...) ( CHECK_DEBUG_LEVEL(LVL) ? __VA_ARGS__ : 0 )
 #else
-   #define DEBUG(...)
-   #define IFDEBUG(...)
+   #define DEBUG(...) 0
+   #define IFDEBUG(...) 0
 #endif
-
-/*defun macro thanks to Kaz Kylheku: https://groups.google.com/d/msg/comp.lang.c/FiC6hbH1azw/-Tiuw2oQoyAJ*/
-#define defun(NAME,ARGS,...) int NAME ARGS { IFDEBUG(2, fprintf(stderr, "%s ",__func__)); return __VA_ARGS__; }
 #define nil   (0)
 #define LPAR  "("
 #define RPAR  ")"
 #define ATOMBUFSZ  10
+#define defun(NAME,ARGS,...) int NAME ARGS { IFDEBUG(2, fprintf(stderr, "%s ",__func__)); return __VA_ARGS__; }
 
 struct state {
 int*m,*n,msz, /*memory next mem-size*/
@@ -46,7 +30,7 @@ int*m,*n,msz, /*memory next mem-size*/
     atoms;    /* head of atom list */
     char linebuf[BUFSIZ];
     char *inputptr;
-} global;
+} global = { .linebuf = { 0 } };
 
 #define INIT_MEMORY  global.n=16+(global.m=calloc(global.msz=getpagesize(),sizeof(int)));
 
@@ -67,26 +51,8 @@ int*m,*n,msz, /*memory next mem-size*/
 #define ATOM_PROPS(x)     list(TO_STRING(x))
 #define INIT_ATOM_LIST    global.atoms = list(ATOMSEEDS(ATOM_PROPS));
 
-int lista(int c,int*a){int z=nil;for(;c;)z=cons(a[--c],z);return z;}
-int listn(int c,...){va_list a;int*z=global.n;
-    va_start(a,c);while(c--)*global.n++=va_arg(a,int);va_end(a);return lista(global.n-z,z);}
-#define list(...) listn(PP_NARG(__VA_ARGS__),__VA_ARGS__)
+#define INIT_INPUTPTR     global.inputptr = global.linebuf;
 
-/* bias the atom encoding for the code for T,  [<my own brilliant idea]
-   this way, the word 1 means 30bit 0 + 2bit 01 :: the symbol T
-        and, the word 0  ::   30bit 0 + 2bit 00 :: the list NIL
-                 word 5  ::   30bit 1 + 2bit 01 :: the symbol NIL
-                 word 9  ::   30bit 2 + 2bit 01 :: the symbol SETQ
-                 word 4  ::   30bit 1 + 2bit 00 :: the list at address 1
-                 word 8  ::   30bit 2 + 2bit 00 :: the list at address 2
-
-   tag  00 : list   : val is "pointer" to 2-cell pair
-        01 : atom   : val is encoded as index into atom list which holds (string) lists
-        10 : object : val is "pointer" to an object union
-        11 : number : val is a 30bit fixnum                [^minilisp ^lisp500]
-
-   each word is interpreted as a 2 bit tag
-   and a sizeof(int)*8-2 bit signed number. 32bit int :: 30bit + 2bit tag [^minilisp]*/
 enum { TAGCONS, TAGATOM, TAGOBJ, TAGNUM,  TAGBITS = 2, TAGMASK = (1U<<TAGBITS)-1 };
 defun(  val,  (x),x>>TAGBITS)
 defun(  tag,  (x),x&TAGMASK)
@@ -107,8 +73,13 @@ defun(fsubr1,(int(*f)()),objfunc(FSUBR, f))
 defun( subr2,(int(*f)()),objfunc( SUBR2,f))
 defun(fsubr2,(int(*f)()),objfunc(FSUBR2,f))
 
+int lista(int c,int*a){int z=nil;for(;c;)z=cons(a[--c],z);return z;}
+int listn(int c,...){va_list a;int*z=global.n;
+    va_start(a,c);while(c--)*global.n++=va_arg(a,int);va_end(a);return lista(global.n-z,z);}
+#define list(...) listn(PP_NARG(__VA_ARGS__),__VA_ARGS__)
+
 #define ATOMSEEDS(x) x(T),x(NIL),x(SETQ),x(QUOTE),x(ATOM),x(EQ),x(COND),\
-		     x(CAR),x(CDR),x(LAMBDA),x(LABEL),x(CONS),x(DEFUN)
+		     x(CAR),x(CDR),x(LAMBDA),x(LABEL),x(CONS),x(DEFUN),x(QUIT)
 #define atom_enum(x) ATOM_##x
 #define short_cut(x) x=atom_enum(x)<<TAGBITS|TAGATOM
 enum{ATOMSEEDS(atom_enum),ATOMSEEDS(short_cut)};
@@ -128,10 +99,6 @@ defun(numberp,(x),tag(x)==TAGNUM)
 defun(  consp,(x),x&&listp(x))
 defun(stringp,(x),tag(x)==TAGOBJ&&ptrobj(x)->tag==STRING)
 
-/*manipulating lists.
-  val() of course returns an int i which indexes `int *m;`
-                             ^^^^^:our "pointer"  ^^^^^^:the memory
-  using the commutativity of indexing in C: m[i] == *(m + i) == i[m] */
 defun(cons,  (x,y),*global.n++=x,*global.n++=y,(global.n-global.m)-2<<TAGBITS|TAGCONS)
 defun(rplaca,(x,y),consp(x)?val(x)[global.m]=y:0)
 defun(rplacd,(x,y),consp(x)?val(x)[global.m+1]=y:0)
@@ -164,12 +131,11 @@ defun(seta,   (a,x,y),(a?rplacd(a,list(y)):(global.env=append(list(list(x,y),glo
 defun(set,      (x,y),seta(assocpair(x,global.env),x,y))
 defun(maplist,  (x,f),null(x)?nil:cons(apply(f,x),maplist(cdr(x),f)))
 
-/*the universal function eval() [^jmc]*/
 defun(sub2,  (x,z),null(x)?z:eq(caar(x),z)?cadar(x):sub2(cdr(x),z))
 defun(sublis,(x,y),atomp(y)?sub2(x,y):cons(sublis(x,car(y)),sublis(x,cdr(y))))
 defun(apply, (f,args),eval(cons(f,appq(args)),nil))
 defun(appq,  (m),null(m)?nil:cons(list(QUOTE,car(m)),appq(cdr(m))))
-defun(eval,  (e,a),
+defun(eval,  (e,a),            /*the universal function eval() [^jmc]*/
     numberp(e)?   e:
     atomp(e)?     assoc(e,a):
     atomp(car(e))?(
@@ -222,61 +188,88 @@ defun(rdbuf, (char**p,char*buf,char c),c?(c==' '        ?(++(*p),rd(p)          
 			                  c>='0'&&c<='9'?        number(rdnum(p,c-'0')):
 					        atom(rdatom(p,buf,strcspn(*p,"() \t"))) ):0)
 defun(rd,    (char**p),rdbuf(p,(char[ATOMBUFSZ]){""},**p))
-defun(readch, (),*global.inputptr++)
+defun(check_input,(),!*global.inputptr?global_readline():1)
+defun(readch,(),check_input()?*global.inputptr++:0)
+defun(read_,(),check_input()?rd(&global.inputptr):QUIT)
+
+int prompt(){ return printf(">"), fflush(0); }
+int readline(char *s,size_t sz){ return (prompt(),fgets(s,sz,stdin)&&((s[strlen(s)-1]=0),1)); }
+int global_readline(){return global.inputptr=global.linebuf,readline(global.linebuf,sizeof(global.linebuf));}
+int repl(x){
+    return (x=read_())==QUIT?0:
+           (IFDEBUG(0,prn(x,stdout),fprintf(stdout,"\n"),prnlst(x,stdout),fprintf(stdout,"\n")),
+	     x = eval(x, global.env),
+	     IFDEBUG(0, dump(x,stdout)),
+             prnlst(x,stdout), printf("\n"), repl(0));
+}
 
 int dump(int x,FILE*f){
+    IFDEBUG(1,fprintf(stderr,"env:\n"), prnlst(global.env,stderr), fprintf(stderr,"\n"));
     fprintf(f,"x: %d\n", x),
     fprintf(f,"0: %o\n", x),
     fprintf(f,"0x: %x\n", x),
-    fprintf(f,"tag(x): %d\n", tag (x)),
-    fprintf(f,"val(x): %d\n", val (x)),
-    fprintf(f,"car(x): %d\n", car (x)),
-    fprintf(f,"cdr(x): %d\n", cdr (x)),
+    fprintf(f,"tag(x): %d\n", tag(x)),
+    fprintf(f,"val(x): %d\n", val(x)),
+    fprintf(f,"car(x): %d\n", car(x)),
+    fprintf(f,"cdr(x): %d\n", cdr(x)),
     prn(x,f), fprintf(f,"\n");
 }
 
-int readline(char *s,size_t sz){
-    printf(">"), fflush(0);
-    if (!fgets(s,sz,stdin))
-	return 0;
-    s[strlen(s)-1]=0;
-    IFDEBUG(1,fprintf(stderr,"%s\n",s));
+int init(){
+    INIT_MEMORY
+    INIT_ATOM_LIST
+    INIT_ENVIRONMENT
+    INIT_INPUTPTR
+    IFDEBUG(2,prnlst(global.atoms,stderr),
+    	      prnlst(global.env,stdout),
+	      fflush(stderr));
     return 1;
 }
 
-int repl(){
-    IFDEBUG(1,fprintf(stderr,"env:\n"), prnlst(global.env,stderr), fprintf(stderr,"\n"));
-
-    if (global.inputptr = global.linebuf, !readline(global.linebuf,sizeof(global.linebuf)))
-        return 0;
-
-    int x = rd (&global.inputptr);
-    IFDEBUG(0,prn(x,stdout), fprintf(stdout,"\n"));
-    IFDEBUG(0,prnlst(x,stdout), fflush(stdout));
-
-    x = eval(x, global.env);
-    IFDEBUG(0, dump(x,stdout));
-    prnlst(x,stdout), printf("\n");
-
-    return repl();
-}
-
 int main(){
-/*better asserts thx to Tim Rentsch https://groups.google.com/d/msg/comp.lang.c/FZldZaPpTT4/5g4bWdsxAwAJ*/
     assert((-1 & 3) == 3); /* that ints are 2's complement */
     assert((-1 >> 1) < 0); /* that right shift keeps sign */
-
-    INIT_MEMORY
-
-    INIT_ATOM_LIST
-    IFDEBUG(1,prnlst(global.atoms,stderr));
-    IFDEBUG(1,prnatom(atom("T"),stderr));
-    IFDEBUG(1,prnatom(atom("NIL"),stderr));
-
-    INIT_ENVIRONMENT
-    IFDEBUG(2,prnlst(global.atoms,stderr));
-    IFDEBUG(2,prnlst(global.env,stdout),fflush(stderr));
-    
-    return repl();
+    return  init() &&
+            repl(0);
 }
 
+
+/* sexp.c - an integer-coded tiny lisp.
+
+  $ make test
+
+cf.
+http://www.ioccc.org/1989/jar.2.c                             <-- memory 'cursors'
+http://leon.bottou.org/projects/minilisp                      <-- compact 'C'-able cell encoding
+http://www.jsoftware.com/jwiki/Essays/Incunabulum             <-- tiny APL interpreter
+http://www-formal.stanford.edu/jmc/recursive/recursive.html   <-- original lisp paper
+http://www.paulgraham.com/rootsoflisp.html                    <-- alternate presentation of core (with bugfix)
+http://www.cse.sc.edu/~mgv/csce330f13/micromanualLISP.pdf     <-- original micro-manual for lisp
+http://codegolf.stackexchange.com/questions/284/write-an-interpreter-for-the-untyped-lambda-calculus/3290#3290
+http://stackoverflow.com/questions/18096456/why-wont-my-little-lisp-quote  <-- earlier version of this program
+http://www.nhplace.com/kent/Papers/Special-Forms.html         <-- FEXPRs NLAMBDAs and MACROs, oh my!
+https://web.archive.org/web/20070317222311/http://www.modeemi.fi/~chery/lisp500/lisp500.c  <-- similar idea
+defun macro thanks to Kaz Kylheku: https://groups.google.com/d/msg/comp.lang.c/FiC6hbH1azw/-Tiuw2oQoyAJ
+better asserts thx to Tim Rentsch https://groups.google.com/d/msg/comp.lang.c/FZldZaPpTT4/5g4bWdsxAwAJ
+
+   bias the atom encoding for the code for T,  [<my own brilliant idea]
+   this way, the word 1 means 30bit 0 + 2bit 01 :: the symbol T
+        and, the word 0  ::   30bit 0 + 2bit 00 :: the list NIL
+                 word 5  ::   30bit 1 + 2bit 01 :: the symbol NIL
+                 word 9  ::   30bit 2 + 2bit 01 :: the symbol SETQ
+                 word 4  ::   30bit 1 + 2bit 00 :: the list at address 1
+                 word 8  ::   30bit 2 + 2bit 00 :: the list at address 2
+
+   tag  00 : list   : val is "pointer" to 2-cell pair
+        01 : atom   : val is encoded as index into atom list which holds (string) lists
+        10 : object : val is "pointer" to an object union
+        11 : number : val is a 30bit fixnum                [^minilisp ^lisp500]
+
+   each word is interpreted as a 2 bit tag
+   and a sizeof(int)*8-2 bit signed number. 32bit int :: 30bit + 2bit tag [^minilisp]
+
+  manipulating lists.
+  val() of course returns an int i which indexes `int *m;`
+                             ^^^^^:our "pointer"  ^^^^^^:the memory
+  using the commutativity of indexing in C: m[i] == *(m + i) == i[m]
+ */
