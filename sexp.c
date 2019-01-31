@@ -237,6 +237,7 @@ int main(){
 /* sexp.c - an integer-coded tiny lisp.
 
   $ make test
+  $ make test cflags=-DDEBUGMODE=1
 
 cf.
 http://www.ioccc.org/1989/jar.2.c                             <-- memory 'cursors'
