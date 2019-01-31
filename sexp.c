@@ -32,8 +32,11 @@ int*m,*n,msz, /*memory next mem-size*/
     char *inputptr;
 } global = { .linebuf = { 0 } };
 
+#define INIT_ALL \
+  		INIT_MEMORY INIT_ATOM_LIST INIT_ENVIRONMENT INIT_INPUTPTR
 #define INIT_MEMORY  global.n=16+(global.m=calloc(global.msz=getpagesize(),sizeof(int)));
-
+#define ATOM_PROPS(x)     list(TO_STRING(x))
+#define INIT_ATOM_LIST    global.atoms = list(ATOMSEEDS(ATOM_PROPS));
 #define INIT_ENVIRONMENT                           \
     global.env = list(                             \
 	       list(T,              T           ), \
@@ -47,10 +50,6 @@ int*m,*n,msz, /*memory next mem-size*/
 	       list(atom("SET"),    subr2(set)  ), \
 	       list(SETQ,          fsubr2(set)  )  \
             );
-
-#define ATOM_PROPS(x)     list(TO_STRING(x))
-#define INIT_ATOM_LIST    global.atoms = list(ATOMSEEDS(ATOM_PROPS));
-
 #define INIT_INPUTPTR     global.inputptr = global.linebuf;
 
 enum { TAGCONS, TAGATOM, TAGOBJ, TAGNUM,  TAGBITS = 2, TAGMASK = (1U<<TAGBITS)-1 };
@@ -170,16 +169,17 @@ defun(prn,      (x,f)FILE*f;,
       consp(x)  ?fprintf(f,"( "),prn(car(x),f),fprintf(f,". "),prn(cdr(x),f),fprintf(f,") "):
 	         fprintf(f,"NIL "))
 defun(prnstring,(x,f)FILE*f;,fprintf(f,"\"%s\" ", ptrobj(x)->s.s))
-defun(prnatomx, (x,atoms,f)FILE*f;,x?prnatomx(x-1,cdr(atoms),f):fprintf(f,"%s", ptrobj(caar(atoms))->s.s))
+defun(prnatomx, (x,atoms,f)FILE*f;,x?prnatomx(x-1,cdr(atoms),f):fprintf(f,"%s ", ptrobj(caar(atoms))->s.s))
 defun(prnatom0, (x,f)FILE*f;,prnatomx(x,global.atoms,f))
-defun(prnatom,  (unsigned x,FILE*f),prnatom0(x>>TAGBITS,f),fprintf(f," "))
+defun(prnatom,  (unsigned x,FILE*f),prnatom0(x>>TAGBITS,f))
 defun(prnlstn,  (x,f)FILE*f;,!listp(x)?prn(x,f):
       ((car(x)?prnlst(car(x),f):0),(cdr(x)?prnlstn(cdr(x),f):0)))
 defun(prnlst,   (x,f)FILE*f;,!listp(x)?prn(x,f):
       (fprintf(f,LPAR),(car(x)?prnlst (car(x),f):0),
                        (cdr(x)?prnlstn(cdr(x),f):0),fprintf(f,RPAR)))
 
-char*rdatom(char**p,char*buf,int i){return memcpy(buf,*p,i),buf[i]=0,(*p)+=i,buf;}
+char*adjust_case(char*buf){ for(char*p=buf;*p;p++)*p=toupper(*p); return buf; }
+char*rdatom(char**p,char*buf,int i){return memcpy(buf,*p,i),buf[i]=0,(*p)+=i,adjust_case(buf);}
 defun(rdlist,(p,z,u)char**p;,u==atom(RPAR)?z:append(cons(u,nil),rdlist(p,z,rd(p))))
 defun(rdnum, (p,v)char**p;,*++*p>='0'&&**p<='9'?rdnum(p,v*10+**p-'0'):v)
 defun(rdbuf, (char**p,char*buf,char c),c?(c==' '        ?(++(*p),rd(p)                ):
@@ -189,19 +189,18 @@ defun(rdbuf, (char**p,char*buf,char c),c?(c==' '        ?(++(*p),rd(p)          
 					        atom(rdatom(p,buf,strcspn(*p,"() \t"))) ):0)
 defun(rd,    (char**p),rdbuf(p,(char[ATOMBUFSZ]){""},**p))
 defun(check_input,(),!*global.inputptr?global_readline():1)
-defun(readch,(),check_input()?*global.inputptr++:0)
+defun(readch,(),check_input()?*global.inputptr++:QUIT)
 defun(read_,(),check_input()?rd(&global.inputptr):QUIT)
 
 int prompt(){ return printf(">"), fflush(0); }
 int readline(char *s,size_t sz){ return (prompt(),fgets(s,sz,stdin)&&((s[strlen(s)-1]=0),1)); }
 int global_readline(){return global.inputptr=global.linebuf,readline(global.linebuf,sizeof(global.linebuf));}
-int repl(x){
-    return (x=read_())==QUIT?0:
-           (IFDEBUG(0,prn(x,stdout),fprintf(stdout,"\n"),prnlst(x,stdout),fprintf(stdout,"\n")),
-	     x = eval(x, global.env),
-	     IFDEBUG(0, dump(x,stdout)),
-             prnlst(x,stdout), printf("\n"), repl(0));
-}
+int repl(x){ return (x=read_())==QUIT?0:
+		    (IFDEBUG(0,prn(x,stdout),fprintf(stdout,"\n"),prnlst(x,stdout),fprintf(stdout,"\n")),
+		    x=eval(x,global.env),
+		    IFDEBUG(0,dump(x,stdout)),
+		    prnlst(x,stdout),printf("\n"),
+		    repl(0)); }
 
 int dump(int x,FILE*f){
     IFDEBUG(1,fprintf(stderr,"env:\n"), prnlst(global.env,stderr), fprintf(stderr,"\n"));
@@ -216,13 +215,9 @@ int dump(int x,FILE*f){
 }
 
 int init(){
-    INIT_MEMORY
-    INIT_ATOM_LIST
-    INIT_ENVIRONMENT
-    INIT_INPUTPTR
+    INIT_ALL
     IFDEBUG(2,prnlst(global.atoms,stderr),
-    	      prnlst(global.env,stdout),
-	      fflush(stderr));
+    	      prnlst(global.env,stdout), fflush(stderr));
     return 1;
 }
 
