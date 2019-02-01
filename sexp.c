@@ -18,37 +18,41 @@
    #define DEBUG(...) 0
    #define IFDEBUG(...) 0
 #endif
+
 #define nil   (0)
 #define LPAR  "("
 #define RPAR  ")"
 #define ATOMBUFSZ  10
-#define defun(NAME,ARGS,...) int NAME ARGS { IFDEBUG(2, fprintf(stderr, "%s ",__func__)); return __VA_ARGS__; }
+#define defun(NAME,ARGS,...) \
+  int NAME ARGS { IFDEBUG(2, fprintf(stderr, "%s ", __func__)); return __VA_ARGS__; }
 
 struct state {
-int*m,*n,msz, /*memory next mem-size*/
-    env,      /* global environment for REPL, modified by SET, SETQ and DEFUN */
-    atoms;    /* head of atom list */
-    char linebuf[BUFSIZ];
-    char *inputptr;
+    int*m,*n,msz, /*memory next mem-size*/
+	env,      /* global environment for REPL, modified by SET, SETQ and DEFUN */
+	atoms;    /* head of atom list */
+	char linebuf[BUFSIZ];
+	char *inputptr;
 } global = { .linebuf = { 0 } };
 
-#define INIT_ALL     INIT_MEMORY INIT_ATOM_LIST INIT_ENVIRONMENT INIT_INPUTPTR
-#define INIT_MEMORY  global.n=16+(global.m=calloc(global.msz=getpagesize(),sizeof(int)));
+#define INIT_ALL     	  INIT_MEMORY  INIT_ATOM_LIST  INIT_ENVIRONMENT  INIT_INPUTPTR
+#define INIT_MEMORY  	  global.n=16+(global.m=calloc(global.msz=getpagesize(),sizeof(int)));
 #define ATOM_PROPS(x)     list(TO_STRING(x))
 #define INIT_ATOM_LIST    global.atoms = list(ATOMSEEDS(ATOM_PROPS));
-#define INIT_ENVIRONMENT                           \
-    global.env = list(                             \
-	       list(T,              T           ), \
-	       list(NIL,            nil         ), \
-	       list(atom("CAAR"),   subr1(caar) ), \
-	       list(atom("CADR"),   subr1(cadr) ), \
-	       list(atom("CDDR"),   subr1(cddr) ), \
-	       list(atom("CADAR"),  subr1(cadar)), \
-	       list(atom("CADDR"),  subr1(caddr)), \
-	       list(atom("CDDDR"),  subr1(cdddr)), \
-	       list(atom("SET"),    subr2(set)  ), \
-	       list(SETQ,          fsubr2(set)  )  \
-            );
+#define INIT_ENVIRONMENT  global.env = list( 	                               \
+					  list(T,              T           ),  \
+					  list(NIL,            nil         ),  \
+					  list(atom("CAAR"),   subr1(caar) ),  \
+					  list(atom("CADR"),   subr1(cadr) ),  \
+					  list(atom("CDDR"),   subr1(cddr) ),  \
+					  list(atom("CADAR"),  subr1(cadar)),  \
+					  list(atom("CADDR"),  subr1(caddr)),  \
+					  list(atom("CDDDR"),  subr1(cdddr)),  \
+					  list(atom("SET"),    subr2(set)  ),  \
+    					  list(atom("READ"),   fsubr1(read_)), \
+					  list(atom("READCH"), fsubr1(readch)),\
+					  list(atom("PRNC"),   subr1(prnc)  ), \
+					  list(SETQ,           fsubr2(set)  )  \
+				       );
 #define INIT_INPUTPTR     global.inputptr = global.linebuf;
 
 enum { TAGCONS, TAGATOM, TAGOBJ, TAGNUM,  TAGBITS = 2, TAGMASK = (1U<<TAGBITS)-1 };
@@ -176,6 +180,7 @@ defun(prnlstn,  (x,f)FILE*f;,!listp(x)?prn(x,f):
 defun(prnlst,   (x,f)FILE*f;,!listp(x)?prn(x,f):
       (fprintf(f,LPAR),(car(x)?prnlst (car(x),f):0),
                        (cdr(x)?prnlstn(cdr(x),f):0),fprintf(f,RPAR)))
+defun(prnc, (x),printf("%c",val(x)))
 
 char*adjust_case(char*buf){ for(char*p=buf;*p;p++)*p=toupper(*p); return buf; }
 char*rdatom(char**p,char*buf,int i){return memcpy(buf,*p,i),buf[i]=0,(*p)+=i,adjust_case(buf);}
@@ -189,7 +194,7 @@ defun(rdbuf, (char**p,char*buf,char c),c?(c==' '        ?(++(*p),rd(p)          
 					        atom(rdatom(p,buf,strcspn(*p,"() \t"))) ):0)
 defun(rd,    (char**p),rdbuf(p,(char[ATOMBUFSZ]){""},**p))
 defun(check_input,(),!*global.inputptr?global_readline():1)
-defun(readch,(),check_input()?*global.inputptr++:QUIT)
+defun(readch,(),check_input()?number(*global.inputptr++):QUIT)
 defun(read_,(),check_input()?rd(&global.inputptr):QUIT)
 
 int prompt(){ return printf(">"), fflush(0); }
@@ -197,10 +202,23 @@ int readline(char *s,size_t sz){ return (prompt(),fgets(s,sz,stdin)&&((s[strlen(
 int global_readline(){return global.inputptr=global.linebuf,readline(global.linebuf,sizeof(global.linebuf));}
 int repl(x){ return (x=read_())==QUIT?0:
 		    (IFDEBUG(0,prn(x,stdout),fprintf(stdout,"\n"),prnlst(x,stdout),fprintf(stdout,"\n")),
-		    x=eval(x,global.env),
-		    IFDEBUG(0,dump(x,stdout)),
-		    prnlst(x,stdout),printf("\n"),
-		    repl(0)); }
+		     x=eval(x,global.env),
+		     IFDEBUG(0,dump(x,stdout)),
+		     prnlst(x,stdout),printf("\n"),
+		     repl()); }
+
+int init(){
+    INIT_ALL
+    IFDEBUG(2,prnlst(global.atoms,stderr),
+    	      prnlst(global.env,stdout), fflush(stderr));
+    return  repl();
+}
+
+int main(){
+    assert((-1 & 3) == 3); /* that ints are 2's complement */
+    assert((-1 >> 1) < 0); /* that right shift keeps sign */
+    return  init();
+}
 
 int dump(int x,FILE*f){
     IFDEBUG(1,fprintf(stderr,"env:\n"), prnlst(global.env,stderr), fprintf(stderr,"\n"));
@@ -212,20 +230,6 @@ int dump(int x,FILE*f){
     fprintf(f,"car(x): %d\n", car(x)),
     fprintf(f,"cdr(x): %d\n", cdr(x)),
     prn(x,f), fprintf(f,"\n");
-}
-
-int init(){
-    INIT_ALL
-    IFDEBUG(2,prnlst(global.atoms,stderr),
-    	      prnlst(global.env,stdout), fflush(stderr));
-    return 1;
-}
-
-int main(){
-    assert((-1 & 3) == 3); /* that ints are 2's complement */
-    assert((-1 >> 1) < 0); /* that right shift keeps sign */
-    return  init() &&
-            repl(0);
 }
 
 
