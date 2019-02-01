@@ -32,8 +32,7 @@ int*m,*n,msz, /*memory next mem-size*/
     char *inputptr;
 } global = { .linebuf = { 0 } };
 
-#define INIT_ALL \
-  		INIT_MEMORY INIT_ATOM_LIST INIT_ENVIRONMENT INIT_INPUTPTR
+#define INIT_ALL     INIT_MEMORY INIT_ATOM_LIST INIT_ENVIRONMENT INIT_INPUTPTR
 #define INIT_MEMORY  global.n=16+(global.m=calloc(global.msz=getpagesize(),sizeof(int)));
 #define ATOM_PROPS(x)     list(TO_STRING(x))
 #define INIT_ATOM_LIST    global.atoms = list(ATOMSEEDS(ATOM_PROPS));
@@ -145,7 +144,7 @@ defun(eval,  (e,a),            /*the universal function eval() [^jmc]*/
 	eq(car(e),CAR)?   car(eval(cadr(e),a)):
 	eq(car(e),CDR)?   cdr(eval(cadr(e),a)):
 	eq(car(e),CONS)?  cons(eval(cadr(e),a),eval(caddr(e),a)):
-	eq(car(e),DEFUN)? (a=list(atom("LABEL"),cadr(e),list(atom("LAMBDA"),caddr(e),cadddr(e))),
+	eq(car(e),DEFUN)? (a=list(LABEL,cadr(e),list(LAMBDA,caddr(e),cadddr(e))),
 	    			   global.env=append(global.env, list(list(cadr(e),a))), a): 
         eval(cons(assoc(car(e),a),cdr(e)),a)):
         //eval(cons(assoc(car(e),a),evlis(cdr(e),a)),a) ): /*<jmc ^rootsoflisp*/
@@ -186,6 +185,7 @@ defun(rdbuf, (char**p,char*buf,char c),c?(c==' '        ?(++(*p),rd(p)          
 			                  c==*RPAR      ?(++(*p),atom(RPAR)           ):
 				          c==*LPAR      ?(++(*p),rdlist(p,nil,rd(p))  ):
 			                  c>='0'&&c<='9'?        number(rdnum(p,c-'0')):
+					  c=='-'&&(*p)[1]>='0'&&(*p)[1]<='9'? number(-rdnum(p,0)):
 					        atom(rdatom(p,buf,strcspn(*p,"() \t"))) ):0)
 defun(rd,    (char**p),rdbuf(p,(char[ATOMBUFSZ]){""},**p))
 defun(check_input,(),!*global.inputptr?global_readline():1)
