@@ -34,10 +34,10 @@ struct state {
 	char *inputptr;
 } global = { .linebuf = { 0 } };
 
-#define INIT_ALL     	  INIT_MEMORY  INIT_ATOM_LIST  INIT_ENVIRONMENT  INIT_INPUTPTR
-#define INIT_MEMORY  	  global.n=16+(global.m=calloc(global.msz=getpagesize(),sizeof(int)));
+#define INIT_ALL     	  INIT_MEMORY, INIT_ATOM_LIST, INIT_ENVIRONMENT, INIT_INPUTPTR
+#define INIT_MEMORY  	  global.n=16+(global.m=calloc(global.msz=getpagesize(),sizeof(int)))
 #define ATOM_PROPS(x)     list(TO_STRING(x))
-#define INIT_ATOM_LIST    global.atoms = list(ATOMSEEDS(ATOM_PROPS));
+#define INIT_ATOM_LIST    global.atoms = list(ATOMSEEDS(ATOM_PROPS))
 #define INIT_ENVIRONMENT  global.env = list( 	                               \
 					  list(T,              T           ),  \
 					  list(NIL,            nil         ),  \
@@ -52,8 +52,8 @@ struct state {
 					  list(atom("READCH"), fsubr1(readch)),\
 					  list(atom("PRNC"),   subr1(prnc)  ), \
 					  list(SETQ,           fsubr2(set)  )  \
-				       );
-#define INIT_INPUTPTR     global.inputptr = global.linebuf;
+				       )
+#define INIT_INPUTPTR     global.inputptr = global.linebuf
 
 enum { TAGCONS, TAGATOM, TAGOBJ, TAGNUM,  TAGBITS = 2, TAGMASK = (1U<<TAGBITS)-1 };
 defun(  val,  (x),x>>TAGBITS)
@@ -197,22 +197,20 @@ defun(check_input,(),!*global.inputptr?global_readline():1)
 defun(readch,(),check_input()?number(*global.inputptr++):QUIT)
 defun(read_,(),check_input()?rd(&global.inputptr):QUIT)
 
-int prompt(){ return printf(">"), fflush(0); }
-int readline(char *s,size_t sz){ return (prompt(),fgets(s,sz,stdin)&&((s[strlen(s)-1]=0),1)); }
-int global_readline(){return global.inputptr=global.linebuf,readline(global.linebuf,sizeof(global.linebuf));}
-int repl(x){ return (x=read_())==QUIT?0:
+defun(prompt,(),printf(">"), fflush(0))
+defun(readline,(char *s,size_t sz), (prompt(),fgets(s,sz,stdin)&&((s[strlen(s)-1]=0),1)))
+defun(global_readline,(),global.inputptr=global.linebuf,readline(global.linebuf,sizeof(global.linebuf)))
+defun(repl,(x), (x=read_())==QUIT?0:
 		    (IFDEBUG(0,prn(x,stdout),fprintf(stdout,"\n"),prnlst(x,stdout),fprintf(stdout,"\n")),
 		     x=eval(x,global.env),
 		     IFDEBUG(0,dump(x,stdout)),
 		     prnlst(x,stdout),printf("\n"),
-		     repl()); }
+		     repl()))
 
-int init(){
-    INIT_ALL
-    IFDEBUG(2,prnlst(global.atoms,stderr),
-    	      prnlst(global.env,stdout), fflush(stderr));
-    return  repl();
-}
+defun(debug_global,(), IFDEBUG(2,prnlst(global.atoms,stderr), prnlst(global.env,stdout), fflush(stderr)))
+defun(init,(), INIT_ALL,
+	       debug_global(),
+	       repl())
 
 int main(){
     assert((-1 & 3) == 3); /* that ints are 2's complement */
