@@ -38,22 +38,25 @@ struct state {
 #define INIT_MEMORY  	  global.n=16+(global.m=calloc(global.msz=getpagesize(),sizeof(int)))
 #define ATOM_PROPS(x)     list(TO_STRING(x))
 #define INIT_ATOM_LIST    global.atoms = list(ATOMSEEDS(ATOM_PROPS))
-#define INIT_ENVIRONMENT  global.env = list( 	                               \
-					  list(T,              T           ),  \
-					  list(NIL,            nil         ),  \
-					  list(atom("CAAR"),   subr1(caar) ),  \
-					  list(atom("CADR"),   subr1(cadr) ),  \
-					  list(atom("CDDR"),   subr1(cddr) ),  \
-					  list(atom("CADAR"),  subr1(cadar)),  \
-					  list(atom("CADDR"),  subr1(caddr)),  \
-					  list(atom("CDDDR"),  subr1(cdddr)),  \
-					  list(atom("SET"),    subr2(set)  ),  \
-    					  list(atom("READ"),   fsubr1(read_)), \
-					  list(atom("READCH"), fsubr1(readch)),\
-					  list(atom("PRNC"),   subr1(prnc)  ), \
-					  list(SETQ,           fsubr2(set)  )  \
+#define INIT_ENVIRONMENT  global.env = list( 	                   \
+					  list(T, T),              \
+					  list(NIL, nil),          \
+    					  SUBR_LIST(make_subr),    \
+    					  SUBR2_LIST(make_subr2),  \
+					  FSUBR_LIST(make_fsubr1), \
+					  FSUBR2_LIST(make_fsubr2) \
 				       )
 #define INIT_INPUTPTR     global.inputptr = global.linebuf
+#define make_subr(X,Y) list(atom(#X),subr1(Y))
+#define make_subr2(X,Y) list(atom(#X),subr2(Y))
+#define make_fsubr1(X,Y) list(atom(#X),fsubr1(Y))
+#define make_fsubr2(X,Y) list(atom(#X),fsubr2(Y))
+#define SUBR_LIST(X) \
+  X(CAAR,caar), X(CADR,cadr), X(CDDR,cddr), X(CADAR,cadar), X(CADDR,caddr), X(CDDDR,cdddr), \
+  X(PRNC,prnc)
+#define SUBR2_LIST(X) X(SET,set)
+#define FSUBR_LIST(X) X(READ,read_), X(READCH,readch)
+#define FSUBR2_LIST(X) X(SETQ,set)
 
 enum { TAGCONS, TAGATOM, TAGOBJ, TAGNUM,  TAGBITS = 2, TAGMASK = (1U<<TAGBITS)-1 };
 defun(  val,  (x),x>>TAGBITS)
