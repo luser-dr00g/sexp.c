@@ -128,7 +128,7 @@ defun(subsq,(x,y,z),null(z)?nil:atomp(z)?(eq(y,z)?x:z):car(z)==QUOTE?z:
       cons(subsq(x,y,car(z)),subsq(x,y,cdr(x))))
 
 defun(append,(x,y),null(x)?y:cons(car(x),append(cdr(x),y))) 	/*association lists [^jmc]*/
-defun(among, (x,y),!null(y)&&equal(x,car(y))||among(x,cdr(y)))
+defun(among, (x,y),!null(y)&&(equal(x,car(y))||among(x,cdr(y))))
 defun(pair,  (x,y),null(x)&&null(y)?nil:consp(x)&&consp(y)? cons(list(car(x),car(y)),pair(cdr(x),cdr(y))):0)
 defun(assoc, (x,y),eq(caar(y),x)?cadar(y):null(y)?0:assoc(x,cdr(y)))
 defun(assocpair,(x,y),eq(caar(y),x)?car(y):null(y)?0:assocpair(x,cdr(y)))
@@ -164,7 +164,7 @@ defun(evlis, (m,a),null(m)?nil:cons(eval(car(m),a),evlis(cdr(m),a)))
 defun(evobjo,(o,e,a)union object o;, o.tag== SUBR ? o.f.f(eval(cadr(e),a)):
                                      o.tag==FSUBR ? o.f.f(cdr(e)):
 			             o.tag== SUBR2? o.f.f(eval(cadr(e),a), eval(caddr(e),a)):
-                                     o.tag==FSUBR2? o.f.f(cadr(e),caddr(e)): 0)
+                                     o.tag==FSUBR2? o.f.f(cadr(e),caddr(e)): e)
 defun(evobj, (e,a),evobjo(*(union object*)(global.m+val(car(e))),e,a))
 
 defun(prn,      (x,f)FILE*f;,
