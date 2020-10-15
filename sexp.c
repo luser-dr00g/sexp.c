@@ -168,19 +168,20 @@ defun(evobjo,(o,e,a)union object o;, o.tag== SUBR ? o.f.f(eval(cadr(e),a)):
 defun(evobj, (e,a),evobjo(*(union object*)(global.m+val(car(e))),e,a))
 
 defun(prn,      (x,f)FILE*f;,
+      (!f?f=stdout:0),
       atomp(x)  ?prnatom(x,f)                : /*print with dot-notation [^stackoverflow]*/
       stringp(x)?prnstring(x,f)              :
       numberp(x)?fprintf(f,"%d ",val(x))     :
       objectp(x)?fprintf(f,"OBJ_%d ",val(x)) :
       consp(x)  ?fprintf(f,"( "),prn(car(x),f),fprintf(f,". "),prn(cdr(x),f),fprintf(f,") "):
 	         fprintf(f,"NIL "))
-defun(prnstring,(x,f)FILE*f;,fprintf(f,"\"%s\" ", ptrobj(x)->s.s))
-defun(prnatomx, (x,atoms,f)FILE*f;,x?prnatomx(x-1,cdr(atoms),f):fprintf(f,"%s ", ptrobj(caar(atoms))->s.s))
-defun(prnatom0, (x,f)FILE*f;,prnatomx(x,global.atoms,f))
-defun(prnatom,  (unsigned x,FILE*f),prnatom0(x>>TAGBITS,f))
-defun(prnlstn,  (x,f)FILE*f;,!listp(x)?prn(x,f):
+defun(prnstring,(x,f)FILE*f;(!f?f=stdout:0),,fprintf(f,"\"%s\" ", ptrobj(x)->s.s))
+defun(prnatomx, (x,atoms,f)FILE*f;,(!f?f=stdout:0),x?prnatomx(x-1,cdr(atoms),f):fprintf(f,"%s ", ptrobj(caar(atoms))->s.s))
+defun(prnatom0, (x,f)FILE*f;,(!f?f=stdout:0),prnatomx(x,global.atoms,f))
+defun(prnatom,  (unsigned x,FILE*f),(!f?f=stdout:0),prnatom0(x>>TAGBITS,f))
+defun(prnlstn,  (x,f)FILE*f;,(!f?f=stdout:0),!listp(x)?prn(x,f):
       ((car(x)?prnlst(car(x),f):0),(cdr(x)?prnlstn(cdr(x),f):0)))
-defun(prnlst,   (x,f)FILE*f;,!listp(x)?prn(x,f):
+defun(prnlst,   (x,f)FILE*f;,(!f?f=stdout:0),!listp(x)?prn(x,f):
       (fprintf(f,LPAR),(car(x)?prnlst (car(x),f):0),
                        (cdr(x)?prnlstn(cdr(x),f):0),fprintf(f,RPAR)))
 defun(prnc, (x),printf("%c",val(x)))
