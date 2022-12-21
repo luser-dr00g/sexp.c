@@ -34,26 +34,28 @@ struct state {
 	char *inputptr;
 } global = { .linebuf = { 0 } };
 
-#define INIT_ALL     	  INIT_MEMORY, INIT_ATOM_LIST, INIT_ENVIRONMENT, INIT_INPUTPTR
-#define INIT_MEMORY  	  global.n=16+(global.m=calloc(global.msz=getpagesize(),sizeof(int)))
-#define ATOM_PROPS(x)     list(TO_STRING(x))
-#define INIT_ATOM_LIST    global.atoms = list(ATOMSEEDS(ATOM_PROPS))
-#define INIT_ENVIRONMENT  global.env = list( 	                   \
+#define INIT_ALL     	 INIT_MEMORY, INIT_ATOM_LIST, INIT_ENVIRONMENT, INIT_INPUTPTR
+#define INIT_MEMORY  	 global.n=16+(global.m=calloc(global.msz=getpagesize(),sizeof(int)))
+#define ATOM_PROPS(x)    list(TO_STRING(x))
+#define INIT_ATOM_LIST   global.atoms = list(ATOMSEEDS(ATOM_PROPS))
+#define INIT_ENVIRONMENT global.env = list( 	                   \
 					  list(T, T),              \
 					  list(NIL, nil),          \
     					  SUBR_LIST(make_subr),    \
     					  SUBR2_LIST(make_subr2),  \
 					  FSUBR_LIST(make_fsubr1), \
 					  FSUBR2_LIST(make_fsubr2) \
-				       )
-#define INIT_INPUTPTR     global.inputptr = global.linebuf
-#define make_subr(X,Y) list(atom(#X),subr1(Y))
-#define make_subr2(X,Y) list(atom(#X),subr2(Y))
+				      )
+#define INIT_INPUTPTR    global.inputptr = global.linebuf
+#define make_subr(X,Y)   list(atom(#X),subr1(Y))
+#define make_subr2(X,Y)  list(atom(#X),subr2(Y))
 #define make_fsubr1(X,Y) list(atom(#X),fsubr1(Y))
 #define make_fsubr2(X,Y) list(atom(#X),fsubr2(Y))
 #define SUBR_LIST(X) \
-  X(CAAR,caar), X(CADR,cadr), X(CDDR,cddr), X(CADAR,cadar), X(CADDR,caddr), X(CDDDR,cdddr), \
-  X(PRNC,prnc)
+  X(CAAR,caar), X(CDAR,cdar), X(CADR,cadr), X(CDDR,cddr), \
+  X(CAAAR,caaar), X(CDAAR,cdaar), X(CADAR,cadar), X(CDDAR,cddar), \
+  X(CAADR,caadr), X(CDADR,cdadr), X(CADDR,caddr), X(CDDDR,cdddr), \
+  X(LENGTH,length), X(PRNC,prnc)
 #define SUBR2_LIST(X) X(SET,set)
 #define FSUBR_LIST(X) X(READ,read_), X(READCH,readch)
 #define FSUBR2_LIST(X) X(SETQ,set)
@@ -70,9 +72,11 @@ union object {int tag;
 };
 
 defun(objptr, (union object*p,union object o),*p=o,object((int*)p-global.m))
-union object*newobjptr(void*p){return global.n+=(sizeof(union object)+sizeof*global.n-1)/sizeof*global.n,p;}
-union object*ptrobj(int x){return(void*)&global.m[x>>TAGBITS];}
-defun(objfunc,(enum objecttag t,int(*f)()),objptr(newobjptr(global.n),(union object){.f={.tag=t,.f=f}}) )
+union object*newobjptr(void*p){return
+    global.n+=(sizeof(union object)+sizeof*global.n-1)/sizeof*global.n,p;}
+union object*ptrobj(x){return(void*)(global.m+val(x));}
+defun(objfunc,(enum objecttag t,int(*f)()),
+    objptr(newobjptr(global.n),(union object){.f={.tag=t,.f=f}}) )
 defun( subr1,(int(*f)()),objfunc( SUBR, f))
 defun(fsubr1,(int(*f)()),objfunc(FSUBR, f))
 defun( subr2,(int(*f)()),objfunc( SUBR2,f))
@@ -105,18 +109,24 @@ defun(  consp,(x),x&&listp(x))
 defun(stringp,(x),tag(x)==TAGOBJ&&ptrobj(x)->tag==STRING)
 
 defun(cons,  (x,y),*global.n++=x,*global.n++=y,(global.n-global.m)-2<<TAGBITS|TAGCONS)
-defun(rplaca,(x,y),consp(x)?val(x)[global.m]=y:0)
-defun(rplacd,(x,y),consp(x)?val(x)[global.m+1]=y:0)
+defun(rplaca,(x,y),consp(x)?(val(x)[global.m]=y),x:x)
+defun(rplacd,(x,y),consp(x)?(val(x)[global.m+1]=y),x:x)
 defun(car,   (x),  consp(x)?val(x)[global.m]:0)
 defun(cdr,   (x),  consp(x)?val(x)[global.m+1]:0)
-defun(caar,  (x),          car(car(x)))
-defun(cadr,  (x),          car(cdr(x)))
-defun(cddr,  (x),          cdr(cdr(x)))
-defun(cadar, (x),      car(cdr(car(x))))
-defun(caddr, (x),      car(cdr(cdr(x))))
-defun(cdddr, (x),      cdr(cdr(cdr(x))))
-defun(caddar,(x),  car(cdr(cdr(car(x)))))
-defun(cadddr,(x),  car(cdr(cdr(cdr(x)))))
+defun(caar,  (x),     car(car(x)))
+defun(cdar,  (x),     cdr(car(x)))
+defun(cadr,  (x),     car(cdr(x)))
+defun(cddr,  (x),     cdr(cdr(x)))
+defun(caaar, (x),    caar(car(x)))
+defun(cdaar, (x),    cdar(car(x)))
+defun(cadar, (x),    cadr(car(x)))
+defun(cddar, (x),    cddr(car(x)))
+defun(caadr, (x),    caar(cdr(x)))
+defun(cdadr, (x),    cdar(cdr(x)))
+defun(caddr, (x),    cadr(cdr(x)))
+defun(cdddr, (x),    cddr(cdr(x)))
+defun(caddar,(x),   caddr(car(x)))
+defun(cadddr,(x),   caddr(cdr(x)))
 
 defun(eq,   (x,y),x==y) 	/*auxiliary functions [^jmc]*/
 defun(ff,   (x),atomp(x)?x:ff(car(x))) /* find first atom */
@@ -129,16 +139,21 @@ defun(subsq,(x,y,z),null(z)?nil:atomp(z)?(eq(y,z)?x:z):car(z)==QUOTE?z:
 
 defun(append,(x,y),null(x)?y:cons(car(x),append(cdr(x),y))) 	/*association lists [^jmc]*/
 defun(among, (x,y),!null(y)&&(equal(x,car(y))||among(x,cdr(y))))
-defun(pair,  (x,y),null(x)&&null(y)?nil:consp(x)&&consp(y)? cons(list(car(x),car(y)),pair(cdr(x),cdr(y))):0)
-defun(assoc, (x,y),eq(caar(y),x)?cadar(y):null(y)?0:assoc(x,cdr(y)))
-defun(assocpair,(x,y),eq(caar(y),x)?car(y):null(y)?0:assocpair(x,cdr(y)))
-defun(seta,   (a,x,y),(a?rplacd(a,list(y)):(global.env=append(list(list(x,y),global.env)))),y)
+defun(pair,  (x,y),null(x)&&null(y)?nil:consp(x)&&consp(y)?
+      cons(list(car(x),car(y)),pair(cdr(x),cdr(y))):0)
+defun(assoc, (x,y),eq(caar(y),x)?cadar(y):null(y)?nil:assoc(x,cdr(y)))
+defun(rassoc,(x,y),eq(cdar(y),x)?car(y):null(y)?nil:rassoc(x,cdr(y)))
+defun(assocpair,(x,y),eq(caar(y),x)?car(y):null(y)?nil:assocpair(x,cdr(y)))
+defun(seta,   (a,x,y),(a?rplacd(a,list(y)):
+      (global.env=append(list(list(x,y),global.env)))),y)
 defun(set,      (x,y),seta(assocpair(x,global.env),x,y))
-defun(maplist,  (x,f),null(x)?nil:cons(apply(f,x),maplist(cdr(x),f)))
+defun(maplist,  (x,f),null(x)?nil:cons(apply(f,x,nil),maplist(cdr(x),f)))
+defun(length,   (y),number(null(y)||!listp(y)?0:1+val(length(cdr(y)))))
+defun(mapcar,   (x,f),null(x)?nil:cons(apply(f,car(x),nil),mapcar(cdr(x),f)))
 
 defun(sub2,  (x,z),null(x)?z:eq(caar(x),z)?cadar(x):sub2(cdr(x),z))
 defun(sublis,(x,y),atomp(y)?sub2(x,y):cons(sublis(x,car(y)),sublis(x,cdr(y))))
-defun(apply, (f,args),eval(cons(f,appq(args)),nil))
+defun(apply, (f,x,p),eval(cons(f,appq(x)),p))
 defun(appq,  (m),null(m)?nil:cons(list(QUOTE,car(m)),appq(cdr(m))))
 defun(eval,  (e,a),            /*the universal function eval() [^jmc]*/
     numberp(e)?   e:
@@ -165,7 +180,7 @@ defun(evobjo,(o,e,a)union object o;, o.tag== SUBR ? o.f.f(eval(cadr(e),a)):
                                      o.tag==FSUBR ? o.f.f(cdr(e)):
 			             o.tag== SUBR2? o.f.f(eval(cadr(e),a), eval(caddr(e),a)):
                                      o.tag==FSUBR2? o.f.f(cadr(e),caddr(e)): e)
-defun(evobj, (e,a),evobjo(*(union object*)(global.m+val(car(e))),e,a))
+defun(evobj, (e,a),evobjo(*ptrobj(car(e)),e,a))
 
 defun(prn,      (x,f)FILE*f;,
       (!f?f=stdout:0),
@@ -175,8 +190,9 @@ defun(prn,      (x,f)FILE*f;,
       objectp(x)?fprintf(f,"OBJ_%d ",val(x)) :
       consp(x)  ?fprintf(f,"( "),prn(car(x),f),fprintf(f,". "),prn(cdr(x),f),fprintf(f,") "):
 	         fprintf(f,"NIL "))
-defun(prnstring,(x,f)FILE*f;(!f?f=stdout:0),,fprintf(f,"\"%s\" ", ptrobj(x)->s.s))
-defun(prnatomx, (x,atoms,f)FILE*f;,(!f?f=stdout:0),x?prnatomx(x-1,cdr(atoms),f):fprintf(f,"%s ", ptrobj(caar(atoms))->s.s))
+defun(prnstring,(x,f)FILE*f;,(!f?f=stdout:0),fprintf(f,"\"%s\" ", ptrobj(x)->s.s))
+defun(prnatomx, (x,atoms,f)FILE*f;,
+  (!f?f=stdout:0),x?prnatomx(x-1,cdr(atoms),f):fprintf(f,"%s ", ptrobj(caar(atoms))->s.s))
 defun(prnatom0, (x,f)FILE*f;,(!f?f=stdout:0),prnatomx(x,global.atoms,f))
 defun(prnatom,  (unsigned x,FILE*f),(!f?f=stdout:0),prnatom0(x>>TAGBITS,f))
 defun(prnlstn,  (x,f)FILE*f;,(!f?f=stdout:0),!listp(x)?prn(x,f):
@@ -187,14 +203,16 @@ defun(prnlst,   (x,f)FILE*f;,(!f?f=stdout:0),!listp(x)?prn(x,f):
 defun(prnc, (x),printf("%c",val(x)))
 
 char*adjust_case(char*buf){ for(char*p=buf;*p;p++)*p=toupper(*p); return buf; }
-char*rdatom(char**p,char*buf,int i){return memcpy(buf,*p,i),buf[i]=0,(*p)+=i,adjust_case(buf);}
+char*rdatom(char**p,char*buf,int i){return
+    memcpy(buf,*p,i),buf[i]=0,(*p)+=i,adjust_case(buf);}
 defun(rdlist,(p,z,u)char**p;,u==atom(RPAR)?z:append(cons(u,nil),rdlist(p,z,rd(p))))
 defun(rdnum, (p,v)char**p;,*++*p>='0'&&**p<='9'?rdnum(p,v*10+**p-'0'):v)
 defun(rdbuf, (char**p,char*buf,char c),c?(c==' '        ?(++(*p),rd(p)                ):
 			                  c==*RPAR      ?(++(*p),atom(RPAR)           ):
 				          c==*LPAR      ?(++(*p),rdlist(p,nil,rd(p))  ):
 			                  c>='0'&&c<='9'?        number(rdnum(p,c-'0')):
-					  c=='-'&&(*p)[1]>='0'&&(*p)[1]<='9'? number(-rdnum(p,0)):
+					  c=='-'&&(*p)[1]>='0'&&(*p)[1]<='9'?
+					                            number(-rdnum(p,0)):
 					        atom(rdatom(p,buf,strcspn(*p,"() \t"))) ):0)
 defun(rd,    (char**p),rdbuf(p,(char[ATOMBUFSZ]){""},**p))
 defun(check_input,(),!*global.inputptr?global_readline():1)
@@ -203,15 +221,18 @@ defun(read_,(),check_input()?rd(&global.inputptr):QUIT)
 
 defun(prompt,(),printf(">"), fflush(0))
 defun(readline,(char *s,size_t sz), (prompt(),fgets(s,sz,stdin)&&((s[strlen(s)-1]=0),1)))
-defun(global_readline,(),global.inputptr=global.linebuf,readline(global.linebuf,sizeof(global.linebuf)))
+defun(global_readline,(),
+      global.inputptr=global.linebuf,readline(global.linebuf,sizeof(global.linebuf)))
 defun(repl,(x), (x=read_())==QUIT?0:
-		    (IFDEBUG(0,prn(x,stdout),fprintf(stdout,"\n"),prnlst(x,stdout),fprintf(stdout,"\n")),
+		    (IFDEBUG(0,prn(x,stdout),fprintf(stdout,"\n"),
+                               prnlst(x,stdout),fprintf(stdout,"\n")),
 		     x=eval(x,global.env),
 		     IFDEBUG(0,dump(x,stdout)),
 		     prnlst(x,stdout),printf("\n"),
 		     repl()))
 
-defun(debug_global,(), IFDEBUG(2,prnlst(global.atoms,stderr), prnlst(global.env,stdout), fflush(stderr)))
+defun(debug_global,(),
+      IFDEBUG(2,prnlst(global.atoms,stderr), prnlst(global.env,stdout), fflush(stderr)))
 defun(init,(), INIT_ALL,
 	       debug_global(),
 	       repl())
@@ -233,6 +254,7 @@ int dump(int x,FILE*f){
     fprintf(f,"cdr(x): %d\n", cdr(x)),
     prn(x,f), fprintf(f,"\n");
 }
+
 
 
 /* sexp.c - an integer-coded tiny lisp.
