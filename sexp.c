@@ -67,8 +67,8 @@ defun(number, (x),x<<TAGBITS|TAGNUM)
 defun(object, (x),x<<TAGBITS|TAGOBJ)
 enum objecttag {SUBR, FSUBR, SUBR2, FSUBR2, STRING};
 union object {int tag;
-      struct {int tag; int(*f)();} f;
-      struct {int tag; char*s;   } s;
+      struct {int tag; int(*f)(); } f;
+      struct {int tag; int stroffset; } s;
 };
 
 defun(objptr, (union object*p,union object o),*p=o,object((int*)p-global.m))
@@ -94,9 +94,12 @@ int listn(int c,...){va_list a;int*z=global.n;
 enum{ATOMSEEDS(atom_enum),ATOMSEEDS(short_cut)};
 #define TO_STRING(x) string(#x)
 char*newstrptr(char*s){return global.n+=(strlen(s)+1+sizeof*global.n-1)/sizeof*global.n,s;}
-defun(objstr, (char*s),objptr(newobjptr(global.n),(union object){.s={.tag=STRING,.s=s}}))
+defun(objstr, (char*s),
+  objptr(newobjptr(global.n),
+         (union object){.s={.tag=STRING,.stroffset=((int*)s)-global.m}}))
 defun(string, (char*s),objstr(newstrptr(strcpy((char*)global.n,s))))
-defun(findstr,(s,slist,i)char*s;,!strcmp(ptrobj(caar(slist))->s.s,s)?i:
+defun(findstr,(s,slist,i)char*s;,
+      !strcmp((char*)(global.m+ptrobj(caar(slist))->s.stroffset),s)?i:
       cdr(slist)?findstr(s,cdr(slist),i+1):(rplacd(slist,list(list(string(s)))),i+1))
 defun(encstr, (char*s),findstr(s,global.atoms,0))
 defun(atom,   (char*s),encstr(s)<<TAGBITS|TAGATOM)
@@ -187,12 +190,12 @@ defun(prn,      (x,f)FILE*f;,
       atomp(x)  ?prnatom(x,f)                : /*print with dot-notation [^stackoverflow]*/
       stringp(x)?prnstring(x,f)              :
       numberp(x)?fprintf(f,"%d ",val(x))     :
-      objectp(x)?fprintf(f,"OBJ_%d ",val(x)) :
+      objectp(x)?fprintf(f,"OBJ_%X ",val(x)*sizeof(int)) :
       consp(x)  ?fprintf(f,"( "),prn(car(x),f),fprintf(f,". "),prn(cdr(x),f),fprintf(f,") "):
 	         fprintf(f,"NIL "))
-defun(prnstring,(x,f)FILE*f;,(!f?f=stdout:0),fprintf(f,"\"%s\" ", ptrobj(x)->s.s))
+defun(prnstring,(x,f)FILE*f;,(!f?f=stdout:0),fprintf(f,"\"%s\" ", (char*)(global.m+ptrobj(x)->s.stroffset)))
 defun(prnatomx, (x,atoms,f)FILE*f;,
-  (!f?f=stdout:0),x?prnatomx(x-1,cdr(atoms),f):fprintf(f,"%s ", ptrobj(caar(atoms))->s.s))
+  (!f?f=stdout:0),x?prnatomx(x-1,cdr(atoms),f):fprintf(f,"%s ", (char*)(global.m+ptrobj(caar(atoms))->s.stroffset)))
 defun(prnatom0, (x,f)FILE*f;,(!f?f=stdout:0),prnatomx(x,global.atoms,f))
 defun(prnatom,  (unsigned x,FILE*f),(!f?f=stdout:0),prnatom0(x>>TAGBITS,f))
 defun(prnlstn,  (x,f)FILE*f;,(!f?f=stdout:0),!listp(x)?prn(x,f):
@@ -232,15 +235,25 @@ defun(repl,(x), (x=read_())==QUIT?0:
 		     repl()))
 
 defun(debug_global,(),
-      IFDEBUG(2,prnlst(global.atoms,stderr), prnlst(global.env,stdout), fflush(stderr)))
+      prnlst(global.atoms,stderr), prnlst(global.env,stderr), fflush(stderr)
+)
 defun(init,(), INIT_ALL,
-	       debug_global(),
+               IFDEBUG(2, debug_global()),
 	       repl())
 
 int main(){
     assert((-1 & 3) == 3); /* that ints are 2's complement */
     assert((-1 >> 1) < 0); /* that right shift keeps sign */
-    return  init();
+    int r = init();
+    dumpmem();
+    return  r;
+}
+
+int dumpmem(){
+    FILE *f = fopen( "mem.dump","w" );
+    fwrite( global.m, sizeof *global.m, global.n-global.m, f );
+    fclose( f );
+    debug_global();
 }
 
 int dump(int x,FILE*f){
