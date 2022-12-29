@@ -32,9 +32,9 @@ struct state {
 	atoms;    /* head of atom list */
 	char linebuf[BUFSIZ];
 	char *inputptr;
-} global = { .linebuf = { 0 } };
+} global = { .linebuf = { 0 }, .inputptr = global.linebuf };
 
-#define INIT_ALL     	 INIT_MEMORY, INIT_ATOM_LIST, INIT_ENVIRONMENT, INIT_INPUTPTR
+#define INIT_ALL     	 INIT_MEMORY, INIT_ATOM_LIST, INIT_ENVIRONMENT
 #define INIT_MEMORY  	 global.n=16+(global.m=calloc(global.msz=getpagesize(),sizeof(int)))
 #define ATOM_PROPS(x)    list(TO_STRING(x))
 #define INIT_ATOM_LIST   global.atoms = list(ATOMSEEDS(ATOM_PROPS))
@@ -46,7 +46,6 @@ struct state {
 					  FSUBR_LIST(make_fsubr1), \
 					  FSUBR2_LIST(make_fsubr2) \
 				      )
-#define INIT_INPUTPTR    global.inputptr = global.linebuf
 #define make_subr(X,Y)   list(atom(#X),subr1(Y))
 #define make_subr2(X,Y)  list(atom(#X),subr2(Y))
 #define make_fsubr1(X,Y) list(atom(#X),fsubr1(Y))
@@ -67,16 +66,22 @@ defun(number, (x),x<<TAGBITS|TAGNUM)
 defun(object, (x),x<<TAGBITS|TAGOBJ)
 enum objecttag {SUBR, FSUBR, SUBR2, FSUBR2, STRING};
 union object {int tag;
-      struct {int tag; int(*f)(); } f;
+      struct {int tag; int funccode; } f;
       struct {int tag; int stroffset; } s;
 };
+#define MAX_FUNCTIONS 30
+typedef int function();
+function *ftab[MAX_FUNCTIONS];
+int num_functions;
 
 defun(objptr, (union object*p,union object o),*p=o,object((int*)p-global.m))
 union object*newobjptr(void*p){return
     global.n+=(sizeof(union object)+sizeof*global.n-1)/sizeof*global.n,p;}
 union object*ptrobj(x){return(void*)(global.m+val(x));}
+defun(findfunc,(int(*f)(),int n),n==num_functions?(ftab[num_functions]=f,num_functions++):
+  f==ftab[n]?n:findfunc(f,n+1))
 defun(objfunc,(enum objecttag t,int(*f)()),
-    objptr(newobjptr(global.n),(union object){.f={.tag=t,.f=f}}) )
+    objptr(newobjptr(global.n),(union object){.f={.tag=t,.funccode=findfunc(f,0)}}) )
 defun( subr1,(int(*f)()),objfunc( SUBR, f))
 defun(fsubr1,(int(*f)()),objfunc(FSUBR, f))
 defun( subr2,(int(*f)()),objfunc( SUBR2,f))
@@ -179,10 +184,10 @@ defun(eval,  (e,a),            /*the universal function eval() [^jmc]*/
     0)
 defun(evcon, (c,a),eval(caar(c),a)?eval(cadar(c),a):evcon(cdr(c),a))
 defun(evlis, (m,a),null(m)?nil:cons(eval(car(m),a),evlis(cdr(m),a)))
-defun(evobjo,(o,e,a)union object o;, o.tag== SUBR ? o.f.f(eval(cadr(e),a)):
-                                     o.tag==FSUBR ? o.f.f(cdr(e)):
-			             o.tag== SUBR2? o.f.f(eval(cadr(e),a), eval(caddr(e),a)):
-                                     o.tag==FSUBR2? o.f.f(cadr(e),caddr(e)): e)
+defun(evobjo,(o,e,a)union object o;, o.tag== SUBR ? ftab[o.f.funccode](eval(cadr(e),a)):
+                                     o.tag==FSUBR ? ftab[o.f.funccode](cdr(e)):
+			             o.tag== SUBR2? ftab[o.f.funccode](eval(cadr(e),a), eval(caddr(e),a)):
+                                     o.tag==FSUBR2? ftab[o.f.funccode](cadr(e),caddr(e)): e)
 defun(evobj, (e,a),evobjo(*ptrobj(car(e)),e,a))
 
 defun(prn,      (x,f)FILE*f;,
