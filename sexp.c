@@ -240,25 +240,42 @@ defun(repl,(x), (x=read_())==QUIT?0:
 		     repl()))
 
 defun(debug_global,(),
-      prnlst(global.atoms,stderr), prnlst(global.env,stderr), fflush(stderr)
+		prnlst(global.atoms,stderr),
+		prnlst(global.env,stderr),
+		fflush(stderr)
 )
 defun(init,(), INIT_ALL,
                IFDEBUG(2, debug_global()),
 	       repl())
 
-int main(){
+int main( int argc, char *argv[] ){
     assert((-1 & 3) == 3); /* that ints are 2's complement */
     assert((-1 >> 1) < 0); /* that right shift keeps sign */
-    int r = init();
+    int r = argc == 1  ? init()  : (loadmem(),repl());
     dumpmem();
     return  r;
 }
 
+struct record { int used, size, env, atoms; };
+
 int dumpmem(){
+    struct record record = { global.n-global.m, global.msz, global.env, global.atoms };
+    memcpy( global.m, &record, sizeof record );
     FILE *f = fopen( "mem.dump","w" );
     fwrite( global.m, sizeof *global.m, global.n-global.m, f );
     fclose( f );
     debug_global();
+}
+
+int loadmem(){
+    FILE *f = fopen( "mem.dump", "r" );
+    struct record record;
+    fread( &record, sizeof record, 1, f );
+    global.n = record.used + (global.m = calloc( global.msz = record.size, sizeof(int) ));
+    global.env = record.env;
+    global.atoms = record.atoms;
+    fread( ((char*)global.m) + sizeof record, sizeof(int), record.used, f );
+    fclose( f );
 }
 
 int dump(int x,FILE*f){
