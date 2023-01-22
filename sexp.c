@@ -1,3 +1,4 @@
+
 //  sexp.c - an integer-coded tiny lisp.
 //  comments at end
 #include<assert.h>
@@ -232,12 +233,13 @@ defun(readline,(char *s,size_t sz), (prompt(),fgets(s,sz,stdin)&&((s[strlen(s)-1
 defun(global_readline,(),
       global.inputptr=global.linebuf,readline(global.linebuf,sizeof(global.linebuf)))
 defun(repl,(x), (x=read_())==QUIT?0:
-		    (IFDEBUG(0,prn(x,stdout),fprintf(stdout,"\n"),
+		    (IFDEBUG(1,prn(x,stdout),fprintf(stdout,"\n"),
                                prnlst(x,stdout),fprintf(stdout,"\n")),
 		     x=eval(x,global.env),
-		     IFDEBUG(0,dump(x,stdout)),
+		     IFDEBUG(1,dump(x,stdout)),
 		     prnlst(x,stdout),printf("\n"),
 		     repl()))
+
 
 defun(debug_global,(),
 		prnlst(global.atoms,stderr),
@@ -245,30 +247,34 @@ defun(debug_global,(),
 		fflush(stderr)
 )
 defun(init,(), INIT_ALL,
-               IFDEBUG(2, debug_global()),
-	       repl())
+               IFDEBUG(1, debug_global())
+	       )
 
 int main( int argc, char *argv[] ){
+    char *memfile = "mem.dump";
     assert((-1 & 3) == 3); /* that ints are 2's complement */
     assert((-1 >> 1) < 0); /* that right shift keeps sign */
-    int r = argc == 1  ? init()  : (loadmem(),repl());
-    dumpmem();
+    argc = 1;
+    int r = ( ( argc == 1  ? init()
+	                : (loadmem( memfile ), reinit_ftab()) ),
+              repl() );
+    dumpmem( memfile );
     return  r;
 }
 
 struct record { int used, size, env, atoms; };
 
-int dumpmem(){
+int dumpmem( fn ) char *fn;{
     struct record record = { global.n-global.m, global.msz, global.env, global.atoms };
     memcpy( global.m, &record, sizeof record );
-    FILE *f = fopen( "mem.dump","w" );
+    FILE *f = fopen( fn, "w" );
     fwrite( global.m, sizeof *global.m, global.n-global.m, f );
     fclose( f );
     debug_global();
 }
 
-int loadmem(){
-    FILE *f = fopen( "mem.dump", "r" );
+int loadmem( fn ) char *fn; {
+    FILE *f = fopen( fn, "r" );
     struct record record;
     fread( &record, sizeof record, 1, f );
     global.n = record.used + (global.m = calloc( global.msz = record.size, sizeof(int) ));
@@ -276,6 +282,18 @@ int loadmem(){
     global.atoms = record.atoms;
     fread( ((char*)global.m) + sizeof record, sizeof(int), record.used, f );
     fclose( f );
+}
+
+#define reinit_subr1(X,Y) subr1(Y)
+#define reinit_subr2(X,Y) subr2(Y)
+#define reinit_fsubr1(X,Y) fsubr1(Y)
+#define reinit_fsubr2(X,Y) fsubr2(Y)
+
+int reinit_ftab(){
+   SUBR_LIST(reinit_subr1);
+   SUBR2_LIST(reinit_subr2);
+   FSUBR_LIST(reinit_fsubr1);
+   FSUBR2_LIST(reinit_fsubr2);
 }
 
 int dump(int x,FILE*f){
