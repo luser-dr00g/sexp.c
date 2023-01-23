@@ -11,21 +11,20 @@
 #include<unistd.h>
 #include"ppnarg.h"   /*https://github.com/luser-dr00g/sexp.c/blob/master/ppnarg.h*/
 
+int debug =
 #ifdef DEBUGMODE
-   #define CHECK_DEBUG_LEVEL(LVL) (LVL<=DEBUGMODE)
-   #define DEBUG(LVL,...) ( CHECK_DEBUG_LEVEL(LVL) ? fprintf(stderr, __VA_ARGS__) : 0 )
-#define IFDEBUG(LVL,...) ( CHECK_DEBUG_LEVEL(LVL) ? __VA_ARGS__ : 0 )
+  DEBUGMODE
 #else
-   #define DEBUG(...) 0
-   #define IFDEBUG(...) 0
+  0
 #endif
+  ;
 
 #define nil   (0)
 #define LPAR  "("
 #define RPAR  ")"
 #define ATOMBUFSZ  10
 #define defun(NAME,ARGS,...) \
-  int NAME ARGS { IFDEBUG(2, fprintf(stderr, "%s ", __func__)); return __VA_ARGS__; }
+  int NAME ARGS { if( debug >= 2 )fprintf(stderr, "%s ", __func__); return __VA_ARGS__; }
 
 struct state {
     int*m,*n,msz, /*memory next mem-size*/
@@ -233,10 +232,10 @@ defun(readline,(char *s,size_t sz), (prompt(),fgets(s,sz,stdin)&&((s[strlen(s)-1
 defun(global_readline,(),
       global.inputptr=global.linebuf,readline(global.linebuf,sizeof(global.linebuf)))
 defun(repl,(x), (x=read_())==QUIT?0:
-		    (IFDEBUG(1,prn(x,stdout),fprintf(stdout,"\n"),
-                               prnlst(x,stdout),fprintf(stdout,"\n")),
+		    ((debug >= 1? prn(x,stdout),fprintf(stdout,"\n"),
+                               prnlst(x,stdout),fprintf(stdout,"\n"):0),
 		     x=eval(x,global.env),
-		     IFDEBUG(1,dump(x,stdout)),
+		     (debug >= 1? dump(x,stdout):0),
 		     prnlst(x,stdout),printf("\n"),
 		     repl()))
 
@@ -247,7 +246,7 @@ defun(debug_global,(),
 		fflush(stderr)
 )
 defun(init,(), INIT_ALL,
-               IFDEBUG(1, debug_global())
+               (debug >= 1? debug_global():0)
 	       )
 
 int main( int argc, char *argv[] ){
@@ -270,8 +269,9 @@ int dumpmem( fn ) char *fn;{
     FILE *f = fopen( fn, "w" );
     fwrite( global.m, sizeof *global.m, global.n-global.m, f );
     fclose( f );
-    debug_global();
+    if( debug >= 1 ) debug_global();
 }
+
 
 int loadmem( fn ) char *fn; {
     FILE *f = fopen( fn, "r" );
@@ -296,8 +296,9 @@ int reinit_ftab(){
    FSUBR2_LIST(reinit_fsubr2);
 }
 
+
 int dump(int x,FILE*f){
-    IFDEBUG(1,fprintf(stderr,"env:\n"), prnlst(global.env,stderr), fprintf(stderr,"\n"));
+    (debug >= 1?fprintf(stderr,"env:\n"), prnlst(global.env,stderr), fprintf(stderr,"\n"):0);
     fprintf(f,"x: %d\n", x),
     fprintf(f,"0: %o\n", x),
     fprintf(f,"0x: %x\n", x),
