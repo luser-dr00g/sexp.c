@@ -23,8 +23,9 @@ int debug =
 #define LPAR  "("
 #define RPAR  ")"
 #define ATOMBUFSZ  10
-#define defun(NAME,ARGS,...) \
-  int NAME ARGS { if( debug >= 2 )fprintf(stderr, "%s ", __func__); return __VA_ARGS__; }
+#define defun_(LEVEL,NAME,ARGS,...) \
+  int NAME ARGS { if( debug >= LEVEL )fprintf(stderr, "%s ", __func__); return __VA_ARGS__; }
+#define defun(NAME,ARGS,...) defun_(2,NAME,ARGS,__VA_ARGS__)
 
 struct state {
     int*m,*n,msz, /*memory next mem-size*/
@@ -41,27 +42,27 @@ struct state {
 #define INIT_ENVIRONMENT global.env = list( 	                   \
 					  list(T, T),              \
 					  list(NIL, nil),          \
-    					  SUBR_LIST(make_subr),    \
-    					  SUBR2_LIST(make_subr2),  \
-					  FSUBR_LIST(make_fsubr1), \
-					  FSUBR2_LIST(make_fsubr2) \
+    					  EACH_SUBR(make_subr),    \
+    					  EACH_SUBR2(make_subr2),  \
+					  EACH_FSUBR(make_fsubr1), \
+					  EACH_FSUBR2(make_fsubr2) \
 				      )
 #define make_subr(X,Y)   list(atom(#X),subr1(Y))
 #define make_subr2(X,Y)  list(atom(#X),subr2(Y))
 #define make_fsubr1(X,Y) list(atom(#X),fsubr1(Y))
 #define make_fsubr2(X,Y) list(atom(#X),fsubr2(Y))
-#define SUBR_LIST(X) \
+#define EACH_SUBR(X) \
   X(CAAR,caar), X(CDAR,cdar), X(CADR,cadr), X(CDDR,cddr), \
   X(CAAAR,caaar), X(CDAAR,cdaar), X(CADAR,cadar), X(CDDAR,cddar), \
   X(CAADR,caadr), X(CDADR,cdadr), X(CADDR,caddr), X(CDDDR,cdddr), \
   X(LENGTH,length), X(PRNC,prnc)
-#define SUBR2_LIST(X) X(SET,set)
-#define FSUBR_LIST(X) X(READ,read_), X(READCH,readch)
-#define FSUBR2_LIST(X) X(SETQ,set)
+#define EACH_SUBR2(X) X(SET,set)
+#define EACH_FSUBR(X) X(READ,read_), X(READCH,readch)
+#define EACH_FSUBR2(X) X(SETQ,set)
 
 enum { TAGCONS, TAGATOM, TAGOBJ, TAGNUM,  TAGBITS = 2, TAGMASK = (1U<<TAGBITS)-1 };
-defun(  val,  (x),x>>TAGBITS)
-defun(  tag,  (x),x&TAGMASK)
+defun_(3,  val,  (x),x>>TAGBITS)
+defun_(3,  tag,  (x),x&TAGMASK)
 defun(number, (x),x<<TAGBITS|TAGNUM)
 defun(object, (x),x<<TAGBITS|TAGOBJ)
 enum objecttag {SUBR, FSUBR, SUBR2, FSUBR2, STRING};
@@ -239,12 +240,11 @@ defun(repl,(x), (x=read_())==QUIT?0:
 		     prnlst(x,stdout),printf("\n"),
 		     repl()))
 
-
 defun(debug_global,(),
-		prnlst(global.atoms,stderr),
-		prnlst(global.env,stderr),
-		fflush(stderr)
-)
+		fprintf(stderr,"atoms: "), prnlst(global.atoms,stderr),
+		fprintf(stderr,"env: "), prnlst(global.env,stderr),
+		fprintf(stderr,"ftab: "), dumpftab( stderr ),
+      		fprintf(stderr, "\n"), fflush(stderr))
 defun(init,(), INIT_ALL,
                (debug >= 1? debug_global():0)
 	       )
@@ -272,7 +272,6 @@ int dumpmem( fn ) char *fn;{
     if( debug >= 1 ) debug_global();
 }
 
-
 int loadmem( fn ) char *fn; {
     FILE *f = fopen( fn, "r" );
     struct record record;
@@ -290,17 +289,25 @@ int loadmem( fn ) char *fn; {
 #define reinit_fsubr2(X,Y) fsubr2(Y)
 
 int reinit_ftab(){
-   SUBR_LIST(reinit_subr1);
-   SUBR2_LIST(reinit_subr2);
-   FSUBR_LIST(reinit_fsubr1);
-   FSUBR2_LIST(reinit_fsubr2);
+   EACH_SUBR(reinit_subr1);
+   EACH_SUBR2(reinit_subr2);
+   EACH_FSUBR(reinit_fsubr1);
+   EACH_FSUBR2(reinit_fsubr2);
 }
 
+#define dump_func(X,Y) fprintf(f, "%s ", #Y)
+
+int dumpftab(FILE*f){
+  EACH_SUBR(dump_func);
+  EACH_SUBR2(dump_func);
+  EACH_FSUBR(dump_func);
+  EACH_FSUBR2(dump_func);
+}
 
 int dump(int x,FILE*f){
-    (debug >= 1?fprintf(stderr,"env:\n"), prnlst(global.env,stderr), fprintf(stderr,"\n"):0);
+    (debug > 1?fprintf(stderr,"env:\n"), prnlst(global.env,stderr), fprintf(stderr,"\n"):0);
     fprintf(f,"x: %d\n", x),
-    fprintf(f,"0: %o\n", x),
+    //fprintf(f,"0: %o\n", x),
     fprintf(f,"0x: %x\n", x),
     fprintf(f,"tag(x): %d\n", tag(x)),
     fprintf(f,"val(x): %d\n", val(x)),
@@ -310,11 +317,11 @@ int dump(int x,FILE*f){
 }
 
 
-
 /* sexp.c - an integer-coded tiny lisp.
 
   $ make test
   $ make test cflags=-DDEBUGMODE=1
+  $ make CFLAGS='-std=gnu99 -DDEBUGMODE=1 -Wno-implicit-function-declaration -Wno-implicit-int' test 2>error && echo error: && cat error
 
 cf.
 http://www.ioccc.org/1989/jar.2.c                             <-- memory 'cursors'
