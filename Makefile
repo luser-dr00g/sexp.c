@@ -4,4 +4,5 @@ CFLAGS += -std=gnu99
 all: sexp
 
 test: sexp
-	./sexp<test
+	./sexp<test 2>error
+	@echo error: ; cat error
