@@ -10,5 +10,4 @@ test: sexp
 	@echo error: ; cat error
 
 dump:
-	xxd mem.dump
-	od --endian=little -v -t d4 -A n mem.dump
+	od --endian=little -v -t x4z -A x mem.dump
