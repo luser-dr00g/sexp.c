@@ -11,13 +11,6 @@
 #include<unistd.h>
 #include"ppnarg.h"   /*https://github.com/luser-dr00g/sexp.c/blob/master/ppnarg.h*/
 
-int debug =
-#ifdef DEBUGMODE
-  DEBUGMODE
-#else
-  0
-#endif
-  ;
 enum debugoptions {
   NONE  =  0,
   DUMP  =  1,
@@ -26,7 +19,13 @@ enum debugoptions {
   FTAB  =  8,
   TRACE = 16,
   DEEP  = 32,
-};
+} debug =
+#ifdef DEBUGMODE
+  DEBUGMODE
+#else
+  NONE
+#endif
+  ;
 
 #define nil   (0)
 #define LPAR  "("
@@ -88,12 +87,24 @@ defun(objptr, (union object*p,union object o),*p=o,object((int*)p-global.m))
 union object*newobjptr(void*p){return
     global.n+=(sizeof(union object)+(sizeof*global.n)-1)/sizeof*global.n,p;}
 union object*ptrobj(x){return(void*)(global.m+val(x));}
-defun(findfunc,(int(*f)(),int n),
-    n==num_functions?(ftab[num_functions]=f,num_functions++):
-    f==ftab[n]?n:
-    findfunc(f,n+1))
+//defun(installfunction,(int(*f)(),int n),
+//    n==num_functions?(ftab[num_functions]=f,num_functions++):
+//    f==ftab[n]?n:
+//    installfunction(f,n+1))
+int installfunction(int(*f)(),int n){
+  for( ; n<num_functions; ++n )
+    if( f==ftab[n] )
+      return n;
+  if( n==MAX_FUNCTIONS ){
+    fprintf(stderr, "error: num_functions==MAX_FUNCTIONS\n");
+    exit(EXIT_FAILURE);
+  }
+  ftab[n] = f;
+  ++num_functions;
+  return n;
+}
 defun(objfunc,(enum objecttag t,int(*f)()),
-    objptr(newobjptr(global.n), (union object){.f={.tag=t,.funccode=findfunc(f,0)}}) )
+    objptr(newobjptr(global.n), (union object){.f={.tag=t,.funccode=installfunction(f,0)}}) )
 defun(newfunction,(char*n,int(*f)(),enum objecttag e,int x),
     x=objfunc(e,f),
     (debug & FTAB? fprintf(stderr, "%s=%d ", n, ptrobj(x)->f.funccode): 0),
@@ -119,17 +130,26 @@ defun(objstr, (char*s),
   objptr(newobjptr(global.n),
          (union object){.s={.tag=STRING,.stroffset=((int*)s)-global.m}}))
 defun(string, (char*s),objstr(allocstr(strcpy((char*)global.n,s))))
-defun(findstr,(s,slist,i)char*s;,
-      !strcmp((char*)(global.m+ptrobj(caar(slist))->s.stroffset),s)?i:
-      cdr(slist)?findstr(s,cdr(slist),i+1):(rplacd(slist,list(list(string(s)))),i+1))
-defun(encstr, (char*s),findstr(s,global.atoms,0))
+//defun(installatom,(s,slist,i)char*s;,
+//      !strcmp((char*)(global.m+ptrobj(caar(slist))->s.stroffset),s)?i:
+//      cdr(slist)?installatom(s,cdr(slist),i+1):(rplacd(slist,list(list(string(s)))),i+1))
+int installatom(s,slist,i)char*s;{
+  int last = slist;
+  for( ; slist; ++i,last=slist,slist=cdr(slist) )
+    if( !strcmp((char*)(global.m+ptrobj(caar(slist))->s.stroffset),s) )
+      return i;
+  rplacd(last,list(list(string(s))));
+  return i;
+}
+      
+defun(encstr, (char*s),installatom(s,global.atoms,0))
 defun(atom,   (char*s),encstr(s)<<TAGBITS|TAGATOM)
 
 defun(  listp,(x),tag(x)==TAGCONS) 		/* predicates */
 defun(  atomp,(x),tag(x)==TAGATOM)
 defun(objectp,(x),tag(x)==TAGOBJ)
 defun(numberp,(x),tag(x)==TAGNUM)
-defun(  consp,(x),x&&listp(x))
+defun_(DEEP,  consp,(x),x&&listp(x))
 defun(stringp,(x),tag(x)==TAGOBJ&&ptrobj(x)->tag==STRING)
 
 defun(cons,  (x,y),*global.n++=x,*global.n++=y,(global.n-global.m)-2<<TAGBITS|TAGCONS)
@@ -151,7 +171,7 @@ defun(caddr, (x),    cadr(cdr(x)))
 defun(cdddr, (x),    cddr(cdr(x)))
 defun(caddar,(x),   caddr(car(x)))
 defun(cadddr,(x),   caddr(cdr(x)))
-defun(ith_,  (x,i), !i?x:ith_(cdr(x),i-1))
+defun_(DEEP, ith_,  (x,i), i==0?x:ith_(cdr(x),i-1))
 defun(ith,   (x,i), car(ith_(x,i)));
 
 defun(eq,   (x,y),x==y) 	/*auxiliary functions [^jmc]*/
@@ -237,7 +257,6 @@ defun(prnlst,   (x,f)FILE*f;,
       (fprintf(f,LPAR),(car(x)?prnlst (car(x),f):0),
                        (cdr(x)?prnlstn(cdr(x),f):0),fprintf(f,RPAR)))
 defun(prnc, (x),printf("%c",val(x)))
-
 
 char*adjust_case(char*buf){ for(char*p=buf;*p;p++)*p=toupper(*p); return buf; }
 char*rdatom(char**p,char*buf,int i){return
