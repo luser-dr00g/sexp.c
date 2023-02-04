@@ -9,5 +9,5 @@ test: sexp
 	./sexp<test 2>error
 	@echo error: ; cat error
 
-dump:
+dump: mem.dump
 	od --endian=little -v -t x4z -A x mem.dump

@@ -47,18 +47,10 @@ struct state {
 #define INIT_MEMORY  	 global.n=16+(global.m=calloc(global.msz=getpagesize(),sizeof(int)))
 #define ATOM_PROPS(x)    list(TO_STRING(x))
 #define INIT_ATOM_LIST   global.atoms = list(ATOMSEEDS(ATOM_PROPS))
-#define INIT_ENVIRONMENT global.env = list( 	                   \
-					  list(T, T),              \
-					  list(NIL, nil),          \
-    					  EACH_SUBR(make_subr),    \
-    					  EACH_SUBR2(make_subr2),  \
-					  EACH_FSUBR(make_fsubr1), \
-					  EACH_FSUBR2(make_fsubr2) \
-				      )
-#define make_subr(X,Y)   list(atom(#X),subr1(#X,Y))
-#define make_subr2(X,Y)  list(atom(#X),subr2(#X,Y))
-#define make_fsubr1(X,Y) list(atom(#X),fsubr1(#X,Y))
-#define make_fsubr2(X,Y) list(atom(#X),fsubr2(#X,Y))
+#define INIT_ENVIRONMENT global.env = list( list(T, T),              \
+					list(NIL, nil),              \
+				   EACH_FUNC(make_subr,make_subr2,make_fsubr1,make_fsubr2) \
+				   )
 #define EACH_SUBR(X) \
   X(CAAR,caar), X(CDAR,cdar), X(CADR,cadr), X(CDDR,cddr), \
   X(CAAAR,caaar), X(CDAAR,cdaar), X(CADAR,cadar), X(CDDAR,cddar), \
@@ -67,6 +59,16 @@ struct state {
 #define EACH_SUBR2(X) X(SET,set)
 #define EACH_FSUBR(X) X(READ,read_), X(READCH,readch)
 #define EACH_FSUBR2(X) X(SETQ,set)
+#define EACH_FUNC(X,Y,Z,W) \
+  EACH_SUBR(X), \
+  EACH_SUBR2(Y), \
+  EACH_FSUBR(Z), \
+  EACH_FSUBR2(W)
+
+#define make_subr(X,Y)   list(atom(#X),subr1(#X,Y))
+#define make_subr2(X,Y)  list(atom(#X),subr2(#X,Y))
+#define make_fsubr1(X,Y) list(atom(#X),fsubr1(#X,Y))
+#define make_fsubr2(X,Y) list(atom(#X),fsubr2(#X,Y))
 
 enum { TAGCONS, TAGATOM, TAGOBJ, TAGNUM,  TAGBITS = 2, TAGMASK = (1U<<TAGBITS)-1 };
 defun_(DEEP,  val,  (x),x>>TAGBITS)
@@ -130,13 +132,14 @@ defun(objstr, (char*s),
   objptr(newobjptr(global.n),
          (union object){.s={.tag=STRING,.stroffset=((int*)s)-global.m}}))
 defun(string, (char*s),objstr(allocstr(strcpy((char*)global.n,s))))
+char*ptrstr(x){return (char*)(global.m+ptrobj(x)->s.stroffset);}
 //defun(installatom,(s,slist,i)char*s;,
 //      !strcmp((char*)(global.m+ptrobj(caar(slist))->s.stroffset),s)?i:
 //      cdr(slist)?installatom(s,cdr(slist),i+1):(rplacd(slist,list(list(string(s)))),i+1))
 int installatom(s,slist,i)char*s;{
   int last = slist;
   for( ; slist; ++i,last=slist,slist=cdr(slist) )
-    if( !strcmp((char*)(global.m+ptrobj(caar(slist))->s.stroffset),s) )
+    if( !strcmp(ptrstr(caar(slist)),s) )
       return i;
   rplacd(last,list(list(string(s))));
   return i;
@@ -149,7 +152,7 @@ defun(  listp,(x),tag(x)==TAGCONS) 		/* predicates */
 defun(  atomp,(x),tag(x)==TAGATOM)
 defun(objectp,(x),tag(x)==TAGOBJ)
 defun(numberp,(x),tag(x)==TAGNUM)
-defun_(DEEP,  consp,(x),x&&listp(x))
+defun(  consp,(x),x&&listp(x))
 defun(stringp,(x),tag(x)==TAGOBJ&&ptrobj(x)->tag==STRING)
 
 defun(cons,  (x,y),*global.n++=x,*global.n++=y,(global.n-global.m)-2<<TAGBITS|TAGCONS)
@@ -171,15 +174,18 @@ defun(caddr, (x),    cadr(cdr(x)))
 defun(cdddr, (x),    cddr(cdr(x)))
 defun(caddar,(x),   caddr(car(x)))
 defun(cadddr,(x),   caddr(cdr(x)))
-defun_(DEEP, ith_,  (x,i), i==0?x:ith_(cdr(x),i-1))
-defun(ith,   (x,i), car(ith_(x,i)));
+
+defun( nthcdr,(x,i), i==0?x:nthcdr(cdr(x),i-1))
+defun(    nth,(x,i), car(nthcdr(x,i)));
+defun(lastcdr,(x), consp(cdr(x))?lastcdr(cdr(x)):x)
+defun(   last,(x),   car(lastcdr(x)))
 
 defun(eq,   (x,y),x==y) 	/*auxiliary functions [^jmc]*/
 defun(ff,   (x),atomp(x)?x:ff(car(x))) /* find first atom */
 defun(subst,(x,y,z),atomp(z)?(eq(z,y)?x:z): cons(subst(x,y,car(z)),subst(x,y,cdr(z))))
 defun(equal,(x,y),(atomp(x)&&atomp(y)&&eq(x,y))
         ||(consp(x)&&consp(y)&&equal(car(x),car(y))&&equal(cdr(x),cdr(y)))) /*lists equal?*/
-defun(null, (x),listp(x)&&val(x)==0) /*list == NIL?*/
+defun(null, (x),x==0) /*list == NIL?*/
 defun(subsq,(x,y,z),null(z)?nil:atomp(z)?(eq(y,z)?x:z):car(z)==QUOTE?z:
       cons(subsq(x,y,car(z)),subsq(x,y,cdr(x))))
 
@@ -246,9 +252,9 @@ int prnobject(x,f)FILE*f;{
 	  ((char*[]){"SUBR", "FSUBR", "SUBR2", "FSUBR2", "STRING"})[u->tag],
           u->f.funccode);
 }
-defun(prnstring,(x,f)FILE*f;,fprintf(f,"\"%s\" ", (char*)(global.m+ptrobj(x)->s.stroffset)))
+defun(prnstring,(x,f)FILE*f;,fprintf(f,"\"%s\" ", ptrstr(x)))
 defun(prnatom, (x,f)FILE*f;,
-  fprintf(f, "%s ", (char*)(global.m+ptrobj(car(ith(global.atoms,val(x))))->s.stroffset)))
+  fprintf(f, "%s ", ptrstr(car(nth(global.atoms,val(x))))))
 defun(prnlstn,  (x,f)FILE*f;,!listp(x)?prn(x,f):
       ((car(x)?prnlst(car(x),f):0),(cdr(x)?prnlstn(cdr(x),f):0)))
 defun(prnlst,   (x,f)FILE*f;,
@@ -293,16 +299,20 @@ defun(debug_global,(),
 		(debug & FTAB? fprintf(stderr,"ftab: "), dumpftab( stderr ):0),
       		fprintf(stderr, "\n"), fflush(stderr))
 defun(init,(), INIT_ALL,
-               (debug & DUMP ? debug_global():0)
-	       )
+               (debug & DUMP ? debug_global():0))
 
 int main( int argc, char *argv[] ){
     char *memfile = "mem.dump";
     assert((-1 & 3) == 3); /* that ints are 2's complement */
     assert((-1 >> 1) < 0); /* that right shift keeps sign */
-    int r = ( ( argc == 1  ? init()
-	                : (loadmem( memfile ), reinit_ftab()) ),
-              repl() );
+    int r, opt;
+    while( (opt = getopt( argc, argv, "r" )) != -1 ){
+      switch( opt ){
+      case 'r': r = loadmem( memfile ), reinit_ftab(), 1; break;
+      }
+    }
+    if( !r ) r = init();
+    r = repl();
     savemem( memfile );
     return  r;
 }
@@ -329,26 +339,11 @@ int loadmem( fn ) char *fn; {
     fclose( f );
 }
 
-#define reinit_subr1(X,Y) subr1(#X,Y)
-#define reinit_subr2(X,Y) subr2(#X,Y)
-#define reinit_fsubr1(X,Y) fsubr1(#X,Y)
-#define reinit_fsubr2(X,Y) fsubr2(#X,Y)
-
-int reinit_ftab(){
-   EACH_SUBR(reinit_subr1);
-   EACH_SUBR2(reinit_subr2);
-   EACH_FSUBR(reinit_fsubr1);
-   EACH_FSUBR2(reinit_fsubr2);
-}
+#define reinit_func(X,Y) ftab[num_functions++]=Y
+int reinit_ftab(){ EACH_FUNC(reinit_func,reinit_func,reinit_func,reinit_func); }
 
 #define dump_func(X,Y) fprintf(fp, "%s ", #Y)
-
-int dumpftab(FILE*fp){
-  EACH_SUBR(dump_func);
-  EACH_SUBR2(dump_func);
-  EACH_FSUBR(dump_func);
-  EACH_FSUBR2(dump_func);
-}
+int dumpftab(FILE*fp){ EACH_FUNC(dump_func,dump_func,dump_func,dump_func); }
 
 int dump(int x,FILE*f){
     (debug & ENV ?fprintf(stderr,"env:\n"), prnlst(global.env,stderr), fprintf(stderr,"\n"):0);
@@ -366,7 +361,7 @@ int dump(int x,FILE*f){
 /* sexp.c - an integer-coded tiny lisp.
 
   $ make test
-  $ make CFLAGS='-std=gnu99 -DDEBUGMODE=1 -Wno-implicit-function-declaration -Wno-implicit-int' test 2>error && echo error: && cat error
+  $ make test CFLAGS='-std=gnu99 -DDEBUGMODE=1 -Wno-implicit-function-declaration -Wno-implicit-int'
 
 cf.
 http://www.ioccc.org/1989/jar.2.c                             <-- memory 'cursors'

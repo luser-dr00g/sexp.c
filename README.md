@@ -62,3 +62,9 @@ and [Scheme from Scratch](http://michaux.ca/articles/scheme-from-scratch-bootstr
 
 I'm 3 chapters into the 1979 book *Anatomy of Lisp*. So the compiler part should happen in the near(er) future. I'm considering adding alternate implementations for various pieces like the definition of symbols (preserve case, fold to upper, fold to lower), and the behavior of environments (association lists, Weizenbaum environments, other).
 
+---
+
+Much later, the code has undergone some revision to support saving and loading the memory image to/from disk. 
+
+And the debugging support has been re-jiggered to accept multiple options that can be variously combined. 
+Eg. adding `-DDEBUGMODE=15' to CFLAGS outputs debugging information for DUMP(1) + ENV(2) + ATOMS(4) + FTAB(8). Or using `-DDEBUGMODE=16` the interpreter outputs a trace of all defun functions as they're entered.
