@@ -270,6 +270,7 @@ char*rdatom(char**p,char*buf,int i){return
 defun(rdlist,(p,z,u)char**p;,u==atom(RPAR)?z:append(cons(u,nil),rdlist(p,z,rd(p))))
 defun(rdnum, (p,v)char**p;,*++*p>='0'&&**p<='9'?rdnum(p,v*10+**p-'0'):v)
 defun(rdbuf, (char**p,char*buf,char c),c?(c==' '        ?(++(*p),rd(p)                ):
+					  c=='\''       ?(++(*p),list(QUOTE, rd(p))):
 			                  c==*RPAR      ?(++(*p),atom(RPAR)           ):
 				          c==*LPAR      ?(++(*p),rdlist(p,nil,rd(p))  ):
 			                  c>='0'&&c<='9'?        number(rdnum(p,c-'0')):
@@ -325,7 +326,7 @@ int savemem( fn ) char *fn;{
     FILE *f = fopen( fn, "w" );
     fwrite( global.m, sizeof *global.m, global.n-global.m, f );
     fclose( f );
-    if( debug & DUMP  ) debug_global();
+    if( debug & DUMP ) debug_global();
 }
 
 int loadmem( fn ) char *fn; {
