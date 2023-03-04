@@ -15,7 +15,7 @@ enum debugoptions {
   NONE  =  0,
   DUMP  =  1,
   ENV   =  2,
-  ATOMS =  4,
+  SYMS =  4,
   FTAB  =  8,
   TRACE = 16,
   DEEP  = 32,
@@ -30,23 +30,27 @@ enum debugoptions {
 #define nil   (0)
 #define LPAR  "("
 #define RPAR  ")"
-#define ATOMBUFSZ  10
+#define SYMBUFSZ  10
 #define defun_(MODE,NAME,ARGS,...) \
-  int NAME ARGS { if( debug & MODE )fprintf(stderr, "%s ", __func__); return __VA_ARGS__; }
+  int NAME ARGS { \
+    if( MODE & debug )fprintf(stderr, "%s ", __func__); \
+    return __VA_ARGS__; \
+  }
 #define defun(NAME,ARGS,...) defun_(TRACE,NAME,ARGS,__VA_ARGS__)
+#define defdeep(NAME,ARGS,...) defun_(DEEP,NAME,ARGS,__VA_ARGS__)
 
 struct state {
     int*m,*n,msz, /*memory next mem-size*/
 	env,      /* global environment for REPL, modified by SET, SETQ and DEFUN */
-	atoms;    /* head of atom list */
+	syms;    /* head of symbol list */
 	char linebuf[BUFSIZ];
 	char *inputptr;
 } global = { .linebuf = { 0 }, .inputptr = global.linebuf };
 
-#define INIT_ALL     	 INIT_MEMORY, INIT_ATOM_LIST, INIT_ENVIRONMENT
+#define INIT_ALL     	 INIT_MEMORY, INIT_SYMBOL_LIST, INIT_ENVIRONMENT
 #define INIT_MEMORY  	 global.n=16+(global.m=calloc(global.msz=getpagesize(),sizeof(int)))
-#define ATOM_PROPS(x)    list(TO_STRING(x))
-#define INIT_ATOM_LIST   global.atoms = list(ATOMSEEDS(ATOM_PROPS))
+#define SYMBOL_PROPS(x)    list(TO_STRING(x))
+#define INIT_SYMBOL_LIST   global.syms = list(SYMBOLSEEDS(SYMBOL_PROPS))
 #define INIT_ENVIRONMENT global.env = list( list(T, T),              \
 					list(NIL, nil),              \
 				   EACH_FUNC(make_subr,make_subr2,make_fsubr1,make_fsubr2) \
@@ -65,14 +69,14 @@ struct state {
   EACH_FSUBR(Z), \
   EACH_FSUBR2(W)
 
-#define make_subr(X,Y)   list(atom(#X),subr1(#X,Y))
-#define make_subr2(X,Y)  list(atom(#X),subr2(#X,Y))
-#define make_fsubr1(X,Y) list(atom(#X),fsubr1(#X,Y))
-#define make_fsubr2(X,Y) list(atom(#X),fsubr2(#X,Y))
+#define make_subr(X,Y)   list(symbol(#X),subr1(#X,Y))
+#define make_subr2(X,Y)  list(symbol(#X),subr2(#X,Y))
+#define make_fsubr1(X,Y) list(symbol(#X),fsubr1(#X,Y))
+#define make_fsubr2(X,Y) list(symbol(#X),fsubr2(#X,Y))
 
-enum { TAGCONS, TAGATOM, TAGOBJ, TAGNUM,  TAGBITS = 2, TAGMASK = (1U<<TAGBITS)-1 };
-defun_(DEEP,  val,  (x),x>>TAGBITS)
-defun_(DEEP,  tag,  (x),x&TAGMASK)
+enum { TAGCONS, TAGSYM, TAGOBJ, TAGNUM,  TAGBITS = 2, TAGMASK = (1U<<TAGBITS)-1 };
+defdeep(  val,  (x),x>>TAGBITS)
+defdeep(  tag,  (x),x&TAGMASK)
 defun(number, (x),x<<TAGBITS|TAGNUM)
 defun(object, (x),x<<TAGBITS|TAGOBJ)
 enum objecttag {SUBR, FSUBR, SUBR2, FSUBR2, STRING};
@@ -121,11 +125,11 @@ int cons();
 int lista(int c,int*a){ return folda(c,a,cons,nil); }
 #define list(...) lista(PP_NARG(__VA_ARGS__),(int[]){__VA_ARGS__})
 
-#define ATOMSEEDS(x) x(T),x(NIL),x(SETQ),x(QUOTE),x(ATOM),x(EQ),x(COND),\
+#define SYMBOLSEEDS(x) x(T),x(NIL),x(SETQ),x(QUOTE),x(ATOM),x(EQ),x(COND),\
 		     x(CAR),x(CDR),x(LAMBDA),x(LABEL),x(CONS),x(DEFUN),x(QUIT)
-#define atom_enum(x) ATOM_##x
-#define short_cut(x) x=atom_enum(x)<<TAGBITS|TAGATOM
-enum{ATOMSEEDS(atom_enum),ATOMSEEDS(short_cut)};
+#define symbol_enum(x) SYMBOL_##x
+#define short_cut(x) x=symbol_enum(x)<<TAGBITS|TAGSYM
+enum{SYMBOLSEEDS(symbol_enum),SYMBOLSEEDS(short_cut)};
 #define TO_STRING(x) string(#x)
 char*allocstr(char*s){return global.n+=(strlen(s)+1+(sizeof*global.n)-1)/sizeof*global.n,s;}
 defun(objstr, (char*s),
@@ -133,10 +137,10 @@ defun(objstr, (char*s),
          (union object){.s={.tag=STRING,.stroffset=((int*)s)-global.m}}))
 defun(string, (char*s),objstr(allocstr(strcpy((char*)global.n,s))))
 char*ptrstr(x){return (char*)(global.m+ptrobj(x)->s.stroffset);}
-//defun(installatom,(s,slist,i)char*s;,
+//defun(installsymbol,(s,slist,i)char*s;,
 //      !strcmp((char*)(global.m+ptrobj(caar(slist))->s.stroffset),s)?i:
-//      cdr(slist)?installatom(s,cdr(slist),i+1):(rplacd(slist,list(list(string(s)))),i+1))
-int installatom(s,slist,i)char*s;{
+//      cdr(slist)?installsymbol(s,cdr(slist),i+1):(rplacd(slist,list(list(string(s)))),i+1))
+int installsymbol(s,slist,i)char*s;{
   int last = slist;
   for( ; slist; ++i,last=slist,slist=cdr(slist) )
     if( !strcmp(ptrstr(caar(slist)),s) )
@@ -145,11 +149,12 @@ int installatom(s,slist,i)char*s;{
   return i;
 }
       
-defun(encstr, (char*s),installatom(s,global.atoms,0))
-defun(atom,   (char*s),encstr(s)<<TAGBITS|TAGATOM)
+defun(encstr, (char*s),installsymbol(s,global.syms,0))
+defun(symbol,   (char*s),encstr(s)<<TAGBITS|TAGSYM)
 
 defun(  listp,(x),tag(x)==TAGCONS) 		/* predicates */
-defun(  atomp,(x),tag(x)==TAGATOM)
+defun(symbolp,(x),tag(x)==TAGSYM)
+defun(  atomp,(x),tag(x)!=TAGCONS)
 defun(objectp,(x),tag(x)==TAGOBJ)
 defun(numberp,(x),tag(x)==TAGNUM)
 defun(  consp,(x),x&&listp(x))
@@ -209,22 +214,22 @@ defun(apply, (f,x,p),eval(cons(f,appq(x)),p))
 defun(appq,  (m),null(m)?nil:cons(list(QUOTE,car(m)),appq(cdr(m))))
 defun(eval,  (e,a),            /*the universal function eval() [^jmc]*/
     numberp(e)?   e:
-    atomp(e)?     assoc(e,a):
-    atomp(car(e))?(
-	eq(car(e),QUOTE)? cadr(e):
-	eq(car(e),ATOM)?  atomp(eval(cadr(e),a)):
-	eq(car(e),EQ)?    eval(cadr(e),a)==eval(caddr(e),a):
-	eq(car(e),COND)?  evcon(cdr(e),a):
-	eq(car(e),CAR)?   car(eval(cadr(e),a)):
-	eq(car(e),CDR)?   cdr(eval(cadr(e),a)):
-	eq(car(e),CONS)?  cons(eval(cadr(e),a),eval(caddr(e),a)):
-	eq(car(e),DEFUN)? (a=list(LABEL,cadr(e),list(LAMBDA,caddr(e),cadddr(e))),
+    symbolp(e)?     assoc(e,a):
+    symbolp(car(e))?(
+	eq(car(e),QUOTE)? (debug&TRACE&&fprintf(stderr,"QUOTE ")), cadr(e):
+	eq(car(e),ATOM)?  (debug&TRACE&&fprintf(stderr,"ATOM ")), atomp(eval(cadr(e),a)):
+	eq(car(e),EQ)?    (debug&TRACE&&fprintf(stderr,"EQ ")), eval(cadr(e),a)==eval(caddr(e),a):
+	eq(car(e),COND)?  (debug&TRACE&&fprintf(stderr,"COND ")), evcon(cdr(e),a):
+	eq(car(e),CAR)?   (debug&TRACE&&fprintf(stderr,"CAR ")), car(eval(cadr(e),a)):
+	eq(car(e),CDR)?   (debug&TRACE&&fprintf(stderr,"CDR ")), cdr(eval(cadr(e),a)):
+	eq(car(e),CONS)?  (debug&TRACE&&fprintf(stderr,"CONS ")), cons(eval(cadr(e),a),eval(caddr(e),a)):
+	eq(car(e),DEFUN)? (debug&TRACE&&fprintf(stderr,"DEFUN ")), (a=list(LABEL,cadr(e),list(LAMBDA,caddr(e),cadddr(e))),
 	    			  global.env=append(global.env, list(list(cadr(e),a))), a): 
         eval(cons(assoc(car(e),a),cdr(e)),a)):
         //eval(cons(assoc(car(e),a),evlis(cdr(e),a)),a) ): /*<jmc ^rootsoflisp*/
     objectp(car(e))?    evobj(e,a):
-    eq(caar(e),LABEL)?  eval(cons(caddar(e),cdr(e)),cons(list(cadar(e),car(e)),a)):
-    eq(caar(e),LAMBDA)? eval(caddar(e),append(pair(cadar(e),evlis(cdr(e),a)),a)):
+    eq(caar(e),LABEL)?  (debug&TRACE&&fprintf(stderr,"LABEL ")), eval(cons(caddar(e),cdr(e)),cons(list(cadar(e),car(e)),a)):
+    eq(caar(e),LAMBDA)? (debug&TRACE&&fprintf(stderr,"LABEL ")), eval(caddar(e),append(pair(cadar(e),evlis(cdr(e),a)),a)):
     0)
 defun(evcon, (c,a),eval(caar(c),a)?eval(cadar(c),a):evcon(cdr(c),a))
 defun(evlis, (m,a),null(m)?nil:cons(eval(car(m),a),evlis(cdr(m),a)))
@@ -238,7 +243,7 @@ defun(evobj, (e,a),evobjo(*ptrobj(car(e)),e,a))
 
 defun(prn,      (x,f)FILE*f;, /*print with dot-notation [^stackoverflow]*/
       (!f?f=stdout:0),
-      atomp(x)  ?prnatom(x,f)                :
+      symbolp(x)  ?prnsymbol(x,f)                :
       stringp(x)?prnstring(x,f)              :
       numberp(x)?fprintf(f,"%d ",val(x))     :
       objectp(x)?prnobject(x,f) :
@@ -253,8 +258,8 @@ int prnobject(x,f)FILE*f;{
           u->f.funccode);
 }
 defun(prnstring,(x,f)FILE*f;,fprintf(f,"\"%s\" ", ptrstr(x)))
-defun(prnatom, (x,f)FILE*f;,
-  fprintf(f, "%s ", ptrstr(car(nth(global.atoms,val(x))))))
+defun(prnsymbol, (x,f)FILE*f;,
+  fprintf(f, "%s ", ptrstr(car(nth(global.syms,val(x))))))
 defun(prnlstn,  (x,f)FILE*f;,!listp(x)?prn(x,f):
       ((car(x)?prnlst(car(x),f):0),(cdr(x)?prnlstn(cdr(x),f):0)))
 defun(prnlst,   (x,f)FILE*f;,
@@ -265,19 +270,19 @@ defun(prnlst,   (x,f)FILE*f;,
 defun(prnc, (x),printf("%c",val(x)))
 
 char*adjust_case(char*buf){ for(char*p=buf;*p;p++)*p=toupper(*p); return buf; }
-char*rdatom(char**p,char*buf,int i){return
+char*rdsymbol(char**p,char*buf,int i){return
     memcpy(buf,*p,i),buf[i]=0,(*p)+=i,adjust_case(buf);}
-defun(rdlist,(p,z,u)char**p;,u==atom(RPAR)?z:append(cons(u,nil),rdlist(p,z,rd(p))))
+defun(rdlist,(p,z,u)char**p;,u==symbol(RPAR)?z:append(cons(u,nil),rdlist(p,z,rd(p))))
 defun(rdnum, (p,v)char**p;,*++*p>='0'&&**p<='9'?rdnum(p,v*10+**p-'0'):v)
 defun(rdbuf, (char**p,char*buf,char c),c?(c==' '        ?(++(*p),rd(p)                ):
 					  c=='\''       ?(++(*p),list(QUOTE, rd(p))):
-			                  c==*RPAR      ?(++(*p),atom(RPAR)           ):
+			                  c==*RPAR      ?(++(*p),symbol(RPAR)           ):
 				          c==*LPAR      ?(++(*p),rdlist(p,nil,rd(p))  ):
 			                  c>='0'&&c<='9'?        number(rdnum(p,c-'0')):
 					  c=='-'&&(*p)[1]>='0'&&(*p)[1]<='9'?
 					                            number(-rdnum(p,0)):
-					        atom(rdatom(p,buf,strcspn(*p,"() \t"))) ):0)
-defun(rd,    (char**p),rdbuf(p,(char[ATOMBUFSZ]){""},**p))
+					        symbol(rdsymbol(p,buf,strcspn(*p,"() \t"))) ):0)
+defun(rd,    (char**p),rdbuf(p,(char[SYMBUFSZ]){""},**p))
 defun(check_input,(),!*global.inputptr?global_readline():1)
 defun(readch,(),check_input()?number(*global.inputptr++):QUIT)
 defun(read_,(),check_input()?rd(&global.inputptr):QUIT)
@@ -295,9 +300,9 @@ defun(repl,(x), (x=read_())==QUIT?0:
 		     repl()))
 
 defun(debug_global,(),
-		(debug & ATOMS? fprintf(stderr,"atoms: "), prnlst(global.atoms,stderr):0),
-		(debug & ENV? fprintf(stderr,"env: "), prnlst(global.env,stderr):0),
-		(debug & FTAB? fprintf(stderr,"ftab: "), dumpftab( stderr ):0),
+		(debug & SYMS? fprintf(stderr,"\nsymbols: "), prnlst(global.syms,stderr):0),
+		(debug & ENV? fprintf(stderr,"\nenv: "), prnlst(global.env,stderr):0),
+		(debug & FTAB? fprintf(stderr,"\nftab: "), dumpftab( stderr ):0),
       		fprintf(stderr, "\n"), fflush(stderr))
 defun(init,(), INIT_ALL,
                (debug & DUMP ? debug_global():0))
@@ -306,22 +311,25 @@ int main( int argc, char *argv[] ){
     char *memfile = "mem.dump";
     assert((-1 & 3) == 3); /* that ints are 2's complement */
     assert((-1 >> 1) < 0); /* that right shift keeps sign */
-    int r, opt;
-    while( (opt = getopt( argc, argv, "r" )) != -1 ){
+    int opt;
+    int r,s;
+    while( (opt = getopt( argc, argv, "d:rs" )) != -1 ){
       switch( opt ){
-      case 'r': r = loadmem( memfile ), reinit_ftab(), 1; break;
+      case 'd': debug = atoi( optarg ); break;
+      case 'r': r = loadmem( memfile ) && reinit_ftab(); break;
+      case 's': s = 1; break;
       }
     }
     if( !r ) r = init();
     r = repl();
-    savemem( memfile );
+    if( s ) savemem( memfile );
     return  r;
 }
 
-struct record { int used, size, env, atoms; };
+struct record { int used, size, env, syms; };
 
 int savemem( fn ) char *fn;{
-    struct record record = { global.n-global.m, global.msz, global.env, global.atoms };
+    struct record record = { global.n-global.m, global.msz, global.env, global.syms };
     memcpy( global.m, &record, sizeof record );
     FILE *f = fopen( fn, "w" );
     fwrite( global.m, sizeof *global.m, global.n-global.m, f );
@@ -331,27 +339,40 @@ int savemem( fn ) char *fn;{
 
 int loadmem( fn ) char *fn; {
     FILE *f = fopen( fn, "r" );
+    if( !f ) return 0;
     struct record record;
     fread( &record, sizeof record, 1, f );
     global.n = record.used + (global.m = calloc( global.msz = record.size, sizeof(int) ));
+    if( !global.m ) return 0;
     global.env = record.env;
-    global.atoms = record.atoms;
+    global.syms = record.syms;
     fread( ((char*)global.m) + sizeof record, sizeof(int), record.used, f );
     fclose( f );
+    return 1;
 }
 
-#define reinit_func(X,Y) ftab[num_functions++]=Y
-int reinit_ftab(){ EACH_FUNC(reinit_func,reinit_func,reinit_func,reinit_func); }
+#define reinit_func(X,Y) \
+    /*ftab[num_functions++]=Y*/ \
+    installfunction(Y,0), \
+    (debug & FTAB? fprintf(stderr, "%s=%d ", #X, installfunction(Y,0)): 0) \
+/**/
 
-#define dump_func(X,Y) fprintf(fp, "%s ", #Y)
-int dumpftab(FILE*fp){ EACH_FUNC(dump_func,dump_func,dump_func,dump_func); }
+int reinit_ftab(){
+  EACH_FUNC(reinit_func,reinit_func,reinit_func,reinit_func);
+  return 1;
+}
+
+#define dump_func(X,Y) fprintf(fp, "%s=%d ", #Y, installfunction(Y,0))
+int dumpftab(FILE*fp){
+  EACH_FUNC(dump_func,dump_func,dump_func,dump_func);
+}
 
 int dump(int x,FILE*f){
     (debug & ENV ?fprintf(stderr,"env:\n"), prnlst(global.env,stderr), fprintf(stderr,"\n"):0);
     fprintf(f,"x: %d\n", x),
     //fprintf(f,"0: %o\n", x),
     fprintf(f,"0x: %x\n", x),
-    fprintf(f,"tag(x): %d (%s)\n", tag(x), ((char*[]){"CONS","ATOM","OBJ","NUM"})[tag(x)]),
+    fprintf(f,"tag(x): %d (%s)\n", tag(x), ((char*[]){"CONS","SYM","OBJ","NUM"})[tag(x)]),
     fprintf(f,"val(x): %d\n", val(x)),
     fprintf(f,"car(x): %d\n", car(x)),
     fprintf(f,"cdr(x): %d\n", cdr(x)),
