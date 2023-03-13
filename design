@@ -1,0 +1,69 @@
+Design for a persistent memory image for a simple language
+
+This document will attempt to describe the data representation for the
+types in a minimal Lisp-like language, where all the program data --
+indeed the entire state of the interpreter -- can be saved to disk and
+reloaded. The central idea is to define the in-memory representations
+to incorporate the serialization/deserialization automatically --
+baked in, so to speak.
+
+The types are fixnum, symbol, list, string, subr, subr2, fsubr, fsubr2.
+Where a symbol is a short handle that associates to an interned string,
+subr and subr2 are C functions that accept one or two arguments,
+and fsubr and fsubr2 are C functions that accept one or two unevaluated
+lists as arguments.
+
+Using the terminology from David Gudeman,
+``Representing Type Information in Dynamically Typed Languages'',
+the scheme chosen is a /staged representation/ with the first stage
+tagging the low 2 bits of a 32 bit cell giving a spread of 4 types:
+
+  CONS address
+  symbol index
+  OBJ address
+  NUM number
+  
+where CONS cells contain an address in the remaining bits which
+address is the cell number of the pair of car and cdr parts stored
+sequentially, NUM contains a 30 bit signed value, symbol contains an
+index into the symbol list, and OBJ is the escape valve to the second
+stage. An OBJ cell contains an address locating the remaining parts
+of its representation.
+
+At the second stage, an OBJ has a full cell for an extended tag
+and another cell as its payload, this covers the remaining types:
+
+  STRING address
+  SUBR index
+  SUBR2 index
+  FSUBR index
+  FSUBR2 index
+
+where a STRING contains an address of zero terminated string of bytes
+(padded to cell alignment), and where all the function types hold an
+index into the C function table.
+
+These entities exist in a memory space of 32bit int-sized cells with a
+simple linear allocator (new_address = global.next++) where all the 
+addresses described above are the cell number. So accessing a real
+object in memory from this space requires a formula like:
+
+  global.mem[ address ]
+
+or the similar formula to yield a C pointer to a cell:
+
+  ( global.mem + address )
+
+
+Saving/Loading the memory image.
+
+Since all objects exist in a convenient binary space, the whole
+state of the interpeter can be saved and re-loaded by storing
+the contents of the memory as bytes, along with a few sizes and
+important addresses.
+
+  saved memory descriptor
+    cells used  <=>  global.next
+    cells malloced  <=>  global.mem
+    env  <=> global.env
+    syms  <=> global.syms
